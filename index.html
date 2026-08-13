@@ -803,17 +803,23 @@ function loadDemo(){
   showToast('Demo data loaded!');
 }
 
-function showViewer(){
+function showViewer(autoOpen){
   hideLogin();
   hideAdminBar();
   document.getElementById('editor-view').style.display = 'none';
   const viewer = document.getElementById('viewer-view');
   viewer.style.display = 'block';
   viewer.classList.add('active');
-  document.getElementById('envelope-screen').classList.remove('hidden');
-  document.getElementById('envelope').classList.remove('open');
   populateViewer();
   applyAdminVisibility();
+  if(autoOpen){
+    // Shared link: skip envelope, show invitation directly
+    document.getElementById('envelope-screen').classList.add('hidden');
+  }else{
+    // Admin preview: show envelope
+    document.getElementById('envelope-screen').classList.remove('hidden');
+    document.getElementById('envelope').classList.remove('open');
+  }
 }
 
 function backToEdit(){
@@ -1155,7 +1161,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     try{
       const json=base64ToUtf8(decodeURIComponent(hash.slice(5)));
       invitationData=JSON.parse(json);
-      showViewer();
+      showViewer(true);
     }catch(e){console.error('Invalid invitation link',e);}
   }else{
     if(isAdmin()){
