@@ -80,8 +80,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 /* Viewer */
 #viewer-view{display:none;min-height:100vh;}
 #viewer-view.active{display:block;}
-.viewer-bar{position:sticky;top:0;z-index:100;background:linear-gradient(180deg,var(--cream) 70%,transparent);padding:0.8rem 1.5rem;display:flex;justify-content:center;gap:0.6rem;flex-wrap:wrap;}
-.viewer-bar.hidden{display:none;}
+.viewer-bar{position:sticky;top:0;z-index:100;background:linear-gradient(180deg,var(--cream) 70%,transparent);padding:0.8rem 1.5rem;display:none;justify-content:center;gap:0.6rem;flex-wrap:wrap;}
 
 .envelope-screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;background:var(--cream);transition:opacity 0.8s ease,visibility 0.8s;}
 .envelope-screen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
@@ -275,14 +274,14 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
       <ol>
         <li>Go to <strong>Google Drive</strong> and right-click your photo</li>
         <li>Select <strong>Share &rarr; Copy link</strong></li>
-        <li>Make sure it is set to <strong>"Anyone with the link"</strong> (Viewer)</li>
-        <li>Paste the link below — we will convert it automatically</li>
+        <li>Make sure it's set to <strong>"Anyone with the link"</strong> (Viewer)</li>
+        <li>Paste the link below — we'll convert it automatically</li>
       </ol>
     </div>
     <div class="form-group full">
       <label>Google Drive Sharing Links (one per line)</label>
       <textarea id="f-drive-urls" placeholder="https://drive.google.com/file/d/1AbC.../view&#10;https://drive.google.com/file/d/1XyZ.../view" style="min-height:80px;font-size:0.82rem;"></textarea>
-      <small>Paste up to 5 links. We will auto-convert them to direct image URLs.</small>
+      <small>Paste up to 5 links. We'll auto-convert them to direct image URLs.</small>
     </div>
     <button class="btn-secondary drive-convert-btn" onclick="convertDriveLinks()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -318,7 +317,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
         <div class="envelope-flap-left"></div>
         <div class="envelope-flap-right"></div>
         <div class="envelope-card">
-          <div class="mini-text">You are Invited</div>
+          <div class="mini-text">You're Invited</div>
         </div>
         <div class="wax-seal">
           <div class="wax-seal-inner">
@@ -330,7 +329,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
     <div class="tap-text">tap to open</div>
   </div>
 
-  <div class="viewer-bar" id="viewer-bar">
+  <div class="viewer-bar">
     <button class="btn-secondary" onclick="backToEdit()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
       Edit Invitation
@@ -342,7 +341,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
   </div>
 
   <nav class="top-nav">
-    <button class="nav-tab active" onclick="showTab('invited',this)">You are Invited!</button>
+    <button class="nav-tab active" onclick="showTab('invited',this)">You're Invited!</button>
     <button class="nav-tab" onclick="showTab('details',this)">Details</button>
     <button class="nav-tab" onclick="showTab('rsvp',this)">RSVP</button>
   </nav>
@@ -416,7 +415,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
           <div class="curved-text">
             <svg viewBox="0 0 140 140">
               <defs><path id="circlePath" d="M70,70 m-55,0 a55,55 0 1,1 110,0 a55,55 0 1,1 -110,0"/></defs>
-              <text><textPath href="#circlePath">RSVP HERE &bull; RSVP HERE &bull; </textPath></text>
+              <text><textPath href="#circlePath">RSVP HERE • RSVP HERE • </textPath></text>
             </svg>
           </div>
           <div class="center-seal">
@@ -428,7 +427,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
         <div class="attire-box">
           <h3>Attire</h3>
           <div class="attire-type" id="v-attire">Cocktail Attire</div>
-          <div class="attire-note">As we celebrate this milestone, we would love for you to feel celebrated.</div>
+          <div class="attire-note">As we celebrate this milestone, we'd love for you to feel celebrated.</div>
           <div class="color-dots">
             <div class="color-dot" style="background:#8FA8C8;"></div>
             <div class="color-dot" style="background:#E8E0D0;"></div>
@@ -452,8 +451,26 @@ let invitationData = {
 };
 
 let driveConvertedUrls = [];
-let isSharedView = false;
 
+/* ---------- Single-admin control ---------- */
+/* Only the browser that created the invitation (via Generate Link) is
+   treated as the admin. Anyone opening a shared #inv= link is a guest
+   and never sees the Edit/Copy Link controls, even on the same device,
+   unless they are the one who generated it. */
+const ADMIN_KEY = 'gradInviteAdminFor';
+function markAsAdmin(hash){
+  try{ localStorage.setItem(ADMIN_KEY, hash); }catch(e){}
+}
+function isAdminForCurrentLink(){
+  try{ return localStorage.getItem(ADMIN_KEY) === location.hash; }catch(e){ return false; }
+}
+function applyAdminVisibility(){
+  const bar = document.querySelector('.viewer-bar');
+  if(!bar) return;
+  bar.style.display = isAdminForCurrentLink() ? 'flex' : 'none';
+}
+
+/* ---------- Unicode-safe Base64 helpers ---------- */
 function utf8ToBase64(str){
   try {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
@@ -471,15 +488,20 @@ function base64ToUtf8(str){
   }
 }
 
+/* ---------- Google Drive URL Converter ---------- */
 function extractDriveFileId(url){
   if(!url || typeof url !== 'string') return null;
   url = url.trim();
+  // Pattern: /file/d/FILE_ID/view or /file/d/FILE_ID/view?usp=sharing
   let match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if(match) return match[1];
+  // Pattern: /open?id=FILE_ID
   match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if(match) return match[1];
+  // Pattern: /uc?id=FILE_ID or /uc?export=view&id=FILE_ID
   match = url.match(/\/uc\?.*?id=([a-zA-Z0-9_-]+)/);
   if(match) return match[1];
+  // Pattern: lh3.googleusercontent.com/d/FILE_ID
   match = url.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
   if(match) return match[1];
   return null;
@@ -487,6 +509,7 @@ function extractDriveFileId(url){
 
 function driveToDirectUrl(fileId){
   if(!fileId) return null;
+  // Most reliable format as of 2024-2026
   return 'https://lh3.googleusercontent.com/d/' + fileId;
 }
 
@@ -497,8 +520,7 @@ function convertDriveLinks(){
     showToast('Paste some Google Drive links first');
     return;
   }
-  const lines = text.split('
-').map(l => l.trim()).filter(l => l);
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   driveConvertedUrls = [];
   const previewGrid = document.getElementById('drive-preview-grid');
   previewGrid.innerHTML = '';
@@ -510,9 +532,10 @@ function convertDriveLinks(){
       const directUrl = driveToDirectUrl(fileId);
       driveConvertedUrls.push(directUrl);
       convertedCount++;
+      // Add preview
       const item = document.createElement('div');
       item.className = 'drive-preview-item';
-      item.innerHTML = '<span class="drive-badge">Drive</span><img src="' + directUrl + '" alt="Drive preview" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=display:flex;align-items:center;justify-content:center;height:100%;font-size:0.7rem;color:var(--ink-light);padding:0.5rem;text-align:center;>Could not load.<br>Check sharing.</span>';">';
+      item.innerHTML = '<span class="drive-badge">Drive</span><img src="' + directUrl + '" alt="Drive preview" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span style=display:flex;align-items:center;justify-content:center;height:100%;font-size:0.7rem;color:var(--ink-light);padding:0.5rem;text-align:center;>Could not load.<br>Check sharing.</span>\';">';
       previewGrid.appendChild(item);
     }
   });
@@ -532,7 +555,6 @@ window.addEventListener('DOMContentLoaded',()=>{
     try{
       const json = base64ToUtf8(decodeURIComponent(hash.slice(5)));
       invitationData = JSON.parse(json);
-      isSharedView = true;
       showViewer();
     }catch(e){console.error('Invalid invitation link', e);}
   }
@@ -589,18 +611,23 @@ function gatherFormData(){
   invitationData.rsvpDate = document.getElementById('f-rsvp-date').value || '';
   invitationData.reception = document.getElementById('f-reception').value || '';
 
+  // Reset photos array (keep device uploads)
   const currentPhotos = invitationData.photos.slice();
 
-  driveConvertedUrls.forEach((url) => {
+  // Add Google Drive converted URLs to empty slots
+  driveConvertedUrls.forEach((url, i) => {
     const slotIndex = currentPhotos.findIndex(p => p === null);
-    if(slotIndex !== -1) currentPhotos[slotIndex] = url;
+    if(slotIndex !== -1){
+      currentPhotos[slotIndex] = url;
+    }
   });
 
+  // Add regular URLs to remaining empty slots
   const urlText = document.getElementById('f-photo-urls').value.trim();
   if(urlText){
-    const urls = urlText.split("
-").map(u=>u.trim()).filter(u=>u);
+    const urls = urlText.split("\n").map(u=>u.trim()).filter(u=>u);
     urls.forEach(url => {
+      // Auto-convert any Google Drive links in the URL box too
       const fileId = extractDriveFileId(url);
       const finalUrl = fileId ? driveToDirectUrl(fileId) : url;
       const slotIndex = currentPhotos.findIndex(p => p === null);
@@ -618,9 +645,9 @@ function generateLink(){
     const encoded = encodeURIComponent(utf8ToBase64(json));
     const url = location.origin + location.pathname + '#inv=' + encoded;
     history.replaceState(null,'','#inv='+encoded);
+    markAsAdmin('#inv='+encoded);
     copyToClipboard(url);
     showToast('Link copied! Share it with your friends');
-    isSharedView = false;
     setTimeout(()=>showViewer(),800);
   } catch(err) {
     console.error(err);
@@ -651,11 +678,8 @@ function showViewer(){
   viewer.classList.add('active');
   document.getElementById('envelope-screen').classList.remove('hidden');
   document.getElementById('envelope').classList.remove('open');
-
-  const bar = document.getElementById('viewer-bar');
-  if(bar) bar.style.display = isSharedView ? 'none' : 'flex';
-
   populateViewer();
+  applyAdminVisibility();
 }
 
 function backToEdit(){
