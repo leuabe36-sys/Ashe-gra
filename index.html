@@ -80,7 +80,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 /* Viewer */
 #viewer-view{display:none;min-height:100vh;}
 #viewer-view.active{display:block;}
-.viewer-bar{position:sticky;top:0;z-index:100;background:linear-gradient(180deg,var(--cream) 70%,transparent);padding:0.8rem 1.5rem;display:flex;justify-content:center;gap:0.6rem;flex-wrap:wrap;}
+.viewer-bar{position:sticky;top:0;z-index:100;background:linear-gradient(180deg,var(--cream) 70%,transparent);padding:0.8rem 1.5rem;display:none;justify-content:center;gap:0.6rem;flex-wrap:wrap;}
 
 .envelope-screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;background:var(--cream);transition:opacity 0.8s ease,visibility 0.8s;}
 .envelope-screen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
@@ -452,6 +452,24 @@ let invitationData = {
 
 let driveConvertedUrls = [];
 
+/* ---------- Single-admin control ---------- */
+/* Only the browser that created the invitation (via Generate Link) is
+   treated as the admin. Anyone opening a shared #inv= link is a guest
+   and never sees the Edit/Copy Link controls, even on the same device,
+   unless they are the one who generated it. */
+const ADMIN_KEY = 'gradInviteAdminFor';
+function markAsAdmin(hash){
+  try{ localStorage.setItem(ADMIN_KEY, hash); }catch(e){}
+}
+function isAdminForCurrentLink(){
+  try{ return localStorage.getItem(ADMIN_KEY) === location.hash; }catch(e){ return false; }
+}
+function applyAdminVisibility(){
+  const bar = document.querySelector('.viewer-bar');
+  if(!bar) return;
+  bar.style.display = isAdminForCurrentLink() ? 'flex' : 'none';
+}
+
 /* ---------- Unicode-safe Base64 helpers ---------- */
 function utf8ToBase64(str){
   try {
@@ -627,6 +645,7 @@ function generateLink(){
     const encoded = encodeURIComponent(utf8ToBase64(json));
     const url = location.origin + location.pathname + '#inv=' + encoded;
     history.replaceState(null,'','#inv='+encoded);
+    markAsAdmin('#inv='+encoded);
     copyToClipboard(url);
     showToast('Link copied! Share it with your friends');
     setTimeout(()=>showViewer(),800);
@@ -660,6 +679,7 @@ function showViewer(){
   document.getElementById('envelope-screen').classList.remove('hidden');
   document.getElementById('envelope').classList.remove('open');
   populateViewer();
+  applyAdminVisibility();
 }
 
 function backToEdit(){
