@@ -56,6 +56,17 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 .photo-slot .slot-label{font-size:0.7rem;color:var(--ink-light);z-index:1;pointer-events:none;}
 .photo-slot input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;}
 
+/* Google Drive section */
+.drive-preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:0.6rem;margin-top:1rem;}
+.drive-preview-item{aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid rgba(143,168,200,0.3);background:linear-gradient(135deg,#E8DDD0 0%,#D4C4B0 100%);position:relative;}
+.drive-preview-item img{width:100%;height:100%;object-fit:cover;}
+.drive-preview-item .drive-badge{position:absolute;top:4px;left:4px;background:var(--blue-dark);color:var(--white);font-size:0.6rem;padding:2px 6px;border-radius:4px;}
+.drive-instructions{background:linear-gradient(135deg,rgba(143,168,200,0.08),rgba(143,168,200,0.03));border:1px solid rgba(143,168,200,0.2);border-radius:10px;padding:1rem;margin-bottom:1rem;}
+.drive-instructions ol{margin-left:1.2rem;font-size:0.82rem;color:var(--ink-muted);line-height:1.7;}
+.drive-instructions ol li{margin-bottom:0.3rem;}
+.drive-instructions strong{color:var(--ink);}
+.drive-convert-btn{margin-top:0.8rem;}
+
 .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.9rem 2rem;background:linear-gradient(135deg,var(--blue-mid),var(--blue-dark));color:var(--white);border:none;border-radius:999px;font-family:'Inter',sans-serif;font-size:0.9rem;font-weight:500;letter-spacing:0.02em;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 16px rgba(107,140,174,0.35);}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(107,140,174,0.45);}
 .btn-primary:active{transform:translateY(0);}
@@ -155,6 +166,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 .color-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--white);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
 </style>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -229,8 +241,8 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
   </div>
 
   <div class="card">
-    <h2><span class="num">3</span> Photos (up to 5)</h2>
-    <p style="font-size:0.8rem;color:var(--ink-muted);margin-bottom:1rem;">Tip: For best results, use small images or paste image URLs. Large uploads may create long links.</p>
+    <h2><span class="num">3</span> Photos from Device (up to 5)</h2>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-bottom:1rem;">Upload photos directly from your computer or phone.</p>
     <div class="photo-grid" id="photo-grid">
       <div class="photo-slot" data-index="0" onclick="document.getElementById('file-0').click()">
         <span class="slot-label">+ Photo 1</span>
@@ -253,9 +265,37 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
         <input type="file" id="file-4" accept="image/*" onchange="handleFile(this,4)">
       </div>
     </div>
-    <div class="form-group full" style="margin-top:1rem;">
-      <label>Or paste image URLs (one per line, optional)</label>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">4</span> Photos from Google Drive</h2>
+    <div class="drive-instructions">
+      <p style="font-size:0.85rem;color:var(--ink);margin-bottom:0.6rem;font-weight:500;">How to share from Google Drive:</p>
+      <ol>
+        <li>Go to <strong>Google Drive</strong> and right-click your photo</li>
+        <li>Select <strong>Share &rarr; Copy link</strong></li>
+        <li>Make sure it's set to <strong>"Anyone with the link"</strong> (Viewer)</li>
+        <li>Paste the link below — we'll convert it automatically</li>
+      </ol>
+    </div>
+    <div class="form-group full">
+      <label>Google Drive Sharing Links (one per line)</label>
+      <textarea id="f-drive-urls" placeholder="https://drive.google.com/file/d/1AbC.../view&#10;https://drive.google.com/file/d/1XyZ.../view" style="min-height:80px;font-size:0.82rem;"></textarea>
+      <small>Paste up to 5 links. We'll auto-convert them to direct image URLs.</small>
+    </div>
+    <button class="btn-secondary drive-convert-btn" onclick="convertDriveLinks()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Convert & Preview
+    </button>
+    <div class="drive-preview-grid" id="drive-preview-grid" style="display:none;"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">5</span> Photos from Any URL</h2>
+    <div class="form-group full">
+      <label>Image URLs (one per line, optional)</label>
       <textarea id="f-photo-urls" placeholder="https://example.com/photo1.jpg&#10;https://example.com/photo2.jpg" style="min-height:60px;font-size:0.82rem;"></textarea>
+      <small>Any direct image link works here. Google Drive links pasted above will also be auto-converted.</small>
     </div>
   </div>
 
@@ -410,6 +450,8 @@ let invitationData = {
   photos:[null,null,null,null,null]
 };
 
+let driveConvertedUrls = [];
+
 /* ---------- Unicode-safe Base64 helpers ---------- */
 function utf8ToBase64(str){
   try {
@@ -425,6 +467,67 @@ function base64ToUtf8(str){
       function(c){ return '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2); }).join(''));
   } catch(e){
     return decodeURIComponent(escape(atob(str)));
+  }
+}
+
+/* ---------- Google Drive URL Converter ---------- */
+function extractDriveFileId(url){
+  if(!url || typeof url !== 'string') return null;
+  url = url.trim();
+  // Pattern: /file/d/FILE_ID/view or /file/d/FILE_ID/view?usp=sharing
+  let match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(match) return match[1];
+  // Pattern: /open?id=FILE_ID
+  match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(match) return match[1];
+  // Pattern: /uc?id=FILE_ID or /uc?export=view&id=FILE_ID
+  match = url.match(/\/uc\?.*?id=([a-zA-Z0-9_-]+)/);
+  if(match) return match[1];
+  // Pattern: lh3.googleusercontent.com/d/FILE_ID
+  match = url.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+  if(match) return match[1];
+  return null;
+}
+
+function driveToDirectUrl(fileId){
+  if(!fileId) return null;
+  // Most reliable format as of 2024-2026
+  return 'https://lh3.googleusercontent.com/d/' + fileId;
+}
+
+function convertDriveLinks(){
+  const textarea = document.getElementById('f-drive-urls');
+  const text = textarea.value.trim();
+  if(!text){
+    showToast('Paste some Google Drive links first');
+    return;
+  }
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  driveConvertedUrls = [];
+  const previewGrid = document.getElementById('drive-preview-grid');
+  previewGrid.innerHTML = '';
+
+  let convertedCount = 0;
+  lines.forEach(line => {
+    const fileId = extractDriveFileId(line);
+    if(fileId){
+      const directUrl = driveToDirectUrl(fileId);
+      driveConvertedUrls.push(directUrl);
+      convertedCount++;
+      // Add preview
+      const item = document.createElement('div');
+      item.className = 'drive-preview-item';
+      item.innerHTML = '<span class="drive-badge">Drive</span><img src="' + directUrl + '" alt="Drive preview" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span style=display:flex;align-items:center;justify-content:center;height:100%;font-size:0.7rem;color:var(--ink-light);padding:0.5rem;text-align:center;>Could not load.<br>Check sharing.</span>\';">';
+      previewGrid.appendChild(item);
+    }
+  });
+
+  if(convertedCount > 0){
+    previewGrid.style.display = 'grid';
+    showToast(convertedCount + ' Google Drive link(s) converted!');
+  } else {
+    previewGrid.style.display = 'none';
+    showToast('No valid Google Drive links found. Make sure they look like: https://drive.google.com/file/d/.../view');
   }
 }
 
@@ -464,16 +567,16 @@ function handleFile(input,index){
 }
 
 function updatePhotoSlot(index,src){
-  const slot = document.querySelector(`.photo-slot[data-index="${index}"]`);
+  const slot = document.querySelector('.photo-slot[data-index="' + index + '"]');
   slot.classList.add('has-image');
-  slot.innerHTML = `<img src="${src}" alt="Photo ${index+1}"><button class="remove-btn" onclick="event.stopPropagation();removePhoto(${index})">×</button><input type="file" id="file-${index}" accept="image/*" onchange="handleFile(this,${index})" style="position:absolute;inset:0;opacity:0;cursor:pointer;">`;
+  slot.innerHTML = '<img src="' + src + '" alt="Photo ' + (index+1) + '"><button class="remove-btn" onclick="event.stopPropagation();removePhoto(' + index + ')">&times;</button><input type="file" id="file-' + index + '" accept="image/*" onchange="handleFile(this,' + index + ')" style="position:absolute;inset:0;opacity:0;cursor:pointer;">';
 }
 
 function removePhoto(index){
   invitationData.photos[index] = null;
-  const slot = document.querySelector(`.photo-slot[data-index="${index}"]`);
+  const slot = document.querySelector('.photo-slot[data-index="' + index + '"]');
   slot.classList.remove('has-image');
-  slot.innerHTML = `<span class="slot-label">+ Photo ${index+1}</span><input type="file" id="file-${index}" accept="image/*" onchange="handleFile(this,${index})">`;
+  slot.innerHTML = '<span class="slot-label">+ Photo ' + (index+1) + '</span><input type="file" id="file-' + index + '" accept="image/*" onchange="handleFile(this,' + index + ')">';
 }
 
 function gatherFormData(){
@@ -489,11 +592,32 @@ function gatherFormData(){
   invitationData.rsvpEmail = document.getElementById('f-rsvp').value || '';
   invitationData.rsvpDate = document.getElementById('f-rsvp-date').value || '';
   invitationData.reception = document.getElementById('f-reception').value || '';
+
+  // Reset photos array (keep device uploads)
+  const currentPhotos = invitationData.photos.slice();
+
+  // Add Google Drive converted URLs to empty slots
+  driveConvertedUrls.forEach((url, i) => {
+    const slotIndex = currentPhotos.findIndex(p => p === null);
+    if(slotIndex !== -1){
+      currentPhotos[slotIndex] = url;
+    }
+  });
+
+  // Add regular URLs to remaining empty slots
   const urlText = document.getElementById('f-photo-urls').value.trim();
   if(urlText){
     const urls = urlText.split("\n").map(u=>u.trim()).filter(u=>u);
-    urls.forEach((url,i)=>{if(i<5 && !invitationData.photos[i]) invitationData.photos[i]=url;});
+    urls.forEach(url => {
+      // Auto-convert any Google Drive links in the URL box too
+      const fileId = extractDriveFileId(url);
+      const finalUrl = fileId ? driveToDirectUrl(fileId) : url;
+      const slotIndex = currentPhotos.findIndex(p => p === null);
+      if(slotIndex !== -1) currentPhotos[slotIndex] = finalUrl;
+    });
   }
+
+  invitationData.photos = currentPhotos;
 }
 
 function generateLink(){
@@ -551,10 +675,10 @@ function populateViewer(){
   const nameHtml = nameParts.length>2 ? nameParts.slice(0,2).join(' ')+'<br>'+nameParts.slice(2).join(' ') : d.name;
   document.getElementById('v-name').innerHTML = nameHtml;
   document.getElementById('v-class-label').textContent = 'class of '+d.year;
-  const dateMatch = d.date.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  const dateMatch = d.date.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
   if(dateMatch){
     const mm=dateMatch[1].padStart(2,'0'),dd=dateMatch[2].padStart(2,'0'),yy=dateMatch[3].slice(-2);
-    document.getElementById('v-date').textContent = `${mm}.${dd}.${yy}`;
+    document.getElementById('v-date').textContent = mm+'.'+dd+'.'+yy;
   }else{
     document.getElementById('v-date').textContent = d.date;
   }
@@ -570,12 +694,12 @@ function populateViewer(){
   document.getElementById('v-attire').textContent = d.attire;
   const rsvpBtn = document.getElementById('rsvp-seal-btn');
   rsvpBtn.onclick = ()=>{
-    window.location.href = `mailto:${d.rsvpEmail}?subject=${encodeURIComponent('Graduation RSVP for '+d.name)}&body=${encodeURIComponent('I would love to attend '+d.name+"'s graduation party on "+d.date)}`;
+    window.location.href = 'mailto:'+d.rsvpEmail+'?subject='+encodeURIComponent('Graduation RSVP for '+d.name)+'&body='+encodeURIComponent('I would love to attend '+d.name+"'s graduation party on "+d.date);
   };
   d.photos.forEach((src,i)=>{
     const el = document.getElementById('collage-'+i);
-    if(src){el.innerHTML = `<img src="${src}" alt="Photo ${i+1}" style="width:100%;height:100%;object-fit:cover;">`;}
-    else{el.innerHTML = `<span>Photo ${i+1}</span>`;}
+    if(src){el.innerHTML = '<img src="'+src+'" alt="Photo '+(i+1)+'" style="width:100%;height:100%;object-fit:cover;">';}
+    else{el.innerHTML = '<span>Photo '+(i+1)+'</span>';}
   });
 }
 
