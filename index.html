@@ -155,7 +155,6 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 .color-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--white);box-shadow:0 2px 8px rgba(0,0,0,0.12);}
 </style>
 <base target="_blank">
-<base target="_blank">
 </head>
 <body>
 
@@ -231,32 +230,10 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 
   <div class="card">
     <h2><span class="num">3</span> Photos (up to 5)</h2>
-    <p style="font-size:0.8rem;color:var(--ink-muted);margin-bottom:1rem;">Tip: For best results, paste image URLs. Uploaded photos are compressed, but if the link gets too long, use the <strong>Download File</strong> button instead.</p>
-    <div class="photo-grid" id="photo-grid">
-      <div class="photo-slot" data-index="0" onclick="document.getElementById('file-0').click()">
-        <span class="slot-label">+ Photo 1</span>
-        <input type="file" id="file-0" accept="image/*" onchange="handleFile(this,0)">
-      </div>
-      <div class="photo-slot" data-index="1" onclick="document.getElementById('file-1').click()">
-        <span class="slot-label">+ Photo 2</span>
-        <input type="file" id="file-1" accept="image/*" onchange="handleFile(this,1)">
-      </div>
-      <div class="photo-slot" data-index="2" onclick="document.getElementById('file-2').click()">
-        <span class="slot-label">+ Photo 3</span>
-        <input type="file" id="file-2" accept="image/*" onchange="handleFile(this,2)">
-      </div>
-      <div class="photo-slot" data-index="3" onclick="document.getElementById('file-3').click()">
-        <span class="slot-label">+ Photo 4</span>
-        <input type="file" id="file-3" accept="image/*" onchange="handleFile(this,3)">
-      </div>
-      <div class="photo-slot" data-index="4" onclick="document.getElementById('file-4').click()">
-        <span class="slot-label">+ Photo 5</span>
-        <input type="file" id="file-4" accept="image/*" onchange="handleFile(this,4)">
-      </div>
-    </div>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-bottom:1rem;">Tip: Paste Google Drive share links (right-click → Share → Anyone with link). They auto-convert to direct image URLs.</p>
     <div class="form-group full" style="margin-top:1rem;">
-      <label>Or paste image URLs (one per line, optional)</label>
-      <textarea id="f-photo-urls" placeholder="https://example.com/photo1.jpg&#10;https://example.com/photo2.jpg" style="min-height:60px;font-size:0.82rem;"></textarea>
+      <label>Photo URLs / Google Drive links (one per line)</label>
+      <textarea id="f-photo-urls" placeholder="https://drive.google.com/file/d/1AbC.../view&#10;https://example.com/photo.jpg" style="min-height:100px;font-size:0.82rem;"></textarea>
     </div>
   </div>
 
@@ -419,6 +396,12 @@ let invitationData = {
   photos:[null,null,null,null,null]
 };
 
+function gdriveToDirect(url){
+  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(match) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+  return url;
+}
+
 window.addEventListener('DOMContentLoaded',()=>{
   const hash = location.hash;
   if(hash && hash.startsWith('#inv=')){
@@ -429,43 +412,6 @@ window.addEventListener('DOMContentLoaded',()=>{
     }catch(e){console.error('Invalid invitation link');}
   }
 });
-
-function handleFile(input,index){
-  const file = input.files[0];
-  if(!file)return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const img = new Image();
-    img.onload = function(){
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const maxSize = 150;
-      let w = img.width, h = img.height;
-      if(w>h){if(w>maxSize){h*=maxSize/w;w=maxSize;}}
-      else{if(h>maxSize){w*=maxSize/h;h=maxSize;}}
-      canvas.width = w; canvas.height = h;
-      ctx.drawImage(img,0,0,w,h);
-      const dataUrl = canvas.toDataURL('image/jpeg',0.5);
-      invitationData.photos[index] = dataUrl;
-      updatePhotoSlot(index,dataUrl);
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function updatePhotoSlot(index,src){
-  const slot = document.querySelector(`.photo-slot[data-index="${index}"]`);
-  slot.classList.add('has-image');
-  slot.innerHTML = `<img src="${src}" alt="Photo ${index+1}"><button class="remove-btn" onclick="event.stopPropagation();removePhoto(${index})">×</button><input type="file" id="file-${index}" accept="image/*" onchange="handleFile(this,${index})" style="position:absolute;inset:0;opacity:0;cursor:pointer;">`;
-}
-
-function removePhoto(index){
-  invitationData.photos[index] = null;
-  const slot = document.querySelector(`.photo-slot[data-index="${index}"]`);
-  slot.classList.remove('has-image');
-  slot.innerHTML = `<span class="slot-label">+ Photo ${index+1}</span><input type="file" id="file-${index}" accept="image/*" onchange="handleFile(this,${index})">`;
-}
 
 function gatherFormData(){
   invitationData.name = document.getElementById('f-name').value || 'Graduate Name';
@@ -481,9 +427,10 @@ function gatherFormData(){
   invitationData.rsvpDate = document.getElementById('f-rsvp-date').value || '';
   invitationData.reception = document.getElementById('f-reception').value || '';
   const urlText = document.getElementById('f-photo-urls').value.trim();
+  invitationData.photos = [null,null,null,null,null];
   if(urlText){
-    const urls = urlText.split("\n").map(u=>u.trim()).filter(u=>u);
-    urls.forEach((url,i)=>{if(i<5 && !invitationData.photos[i]) invitationData.photos[i]=url;});
+    const urls = urlText.split("\n").map(u=>u.trim()).filter(u=>u).slice(0,5);
+    urls.forEach((url,i)=>{ invitationData.photos[i] = gdriveToDirect(url); });
   }
 }
 
@@ -525,6 +472,7 @@ function loadDemo(){
   document.getElementById('f-rsvp').value = 'rsvp@example.com';
   document.getElementById('f-rsvp-date').value = 'June 1st';
   document.getElementById('f-reception').value = "Join us for a celebration immediately following the ceremony — light bites, drinks, and toasts to what's next.";
+  document.getElementById('f-photo-urls').value = '';
   showToast('Demo data loaded!');
 }
 
@@ -625,27 +573,17 @@ function fallbackCopy(text){
   document.body.removeChild(ta);
 }
 
-function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),3000);
-}
-
 function downloadInvitation(){
   try{
     gatherFormData();
     const json = JSON.stringify(invitationData);
     const encoded = encodeURIComponent(btoa(encodeURIComponent(json)));
-    // Build a standalone HTML file that auto-opens in viewer mode
-    let standalone = document.documentElement.outerHTML;
-    // Inject the hash so it opens directly to the invitation
-    standalone = standalone.replace('<script>', '<script>
-  location.hash="#inv='+encoded+'";');
+    let standalone = '<!DOCTYPE html>\\n' + document.documentElement.outerHTML;
+    standalone = standalone.replace('<script>', '<script>\\n  location.hash=\"#inv='+encoded+'\";');
     const blob = new Blob([standalone], {type:'text/html'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = (invitationData.name||'Graduation') + '_Invitation.html';
+    a.download = (invitationData.name||'Graduation').replace(/[^a-z0-9]/gi,'_') + '_Invitation.html';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -656,6 +594,13 @@ function downloadInvitation(){
     console.error(e);
     showToast('Download failed: ' + e.message);
   }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
 }
 </script>
 </body>
