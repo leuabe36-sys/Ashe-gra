@@ -249,7 +249,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
     <input type="password" class="login-input" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-error" id="login-error"></div>
     <button class="login-btn" onclick="doLogin()">Sign In</button>
-    <div class="hint"> <strong></strong></div>
+    <div class="hint">Default password: <strong>admin123</strong></div>
   </div>
 </div>
 
@@ -804,6 +804,8 @@ function loadDemo(){
 }
 
 function showViewer(){
+  hideLogin();
+  hideAdminBar();
   document.getElementById('editor-view').style.display = 'none';
   const viewer = document.getElementById('viewer-view');
   viewer.style.display = 'block';
@@ -819,6 +821,7 @@ function backToEdit(){
   document.getElementById('viewer-view').classList.remove('active');
   document.getElementById('editor-view').style.display = 'block';
   location.hash = '';
+  if(isAdmin()){showAdminBar();}else{showLogin();}
 }
 
 function populateViewer(){
