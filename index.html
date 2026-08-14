@@ -258,27 +258,26 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 }
 
 
-/* === CAPTCHA fixes === */
-.captcha-status{font-size:0.78rem;color:var(--ink-light);margin:0.4rem 0;text-align:center;min-height:1.3rem;}
-.captcha-status.error{color:var(--danger);font-weight:500;}
-.captcha-status.ok{color:var(--success);font-weight:500;}
-.captcha-status.warn{color:var(--gold-dark);}
-.skip-captcha-btn{display:block;margin:0.5rem auto 0;font-size:0.8rem;color:var(--ink-light);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;}
-.skip-captcha-btn:hover{color:var(--danger);}
-.troubleshoot-link{display:block;margin:0.5rem auto 0;font-size:0.8rem;color:var(--blue-dark);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;}
-.ts-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center;padding:1rem;}
-.ts-modal.active{display:flex;}
-.ts-box{background:var(--white);border-radius:16px;padding:2rem;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);}
-.ts-box h3{font-family:'Playfair Display',serif;font-size:1.3rem;margin-bottom:1rem;}
-.ts-box ol{margin-left:1.2rem;font-size:0.85rem;color:var(--ink-muted);line-height:1.7;}
-.ts-box .close-ts{margin-top:1.2rem;width:100%;padding:0.7rem;background:var(--blue-mid);color:#fff;border:none;border-radius:999px;cursor:pointer;font-family:inherit;}
+/* === Auth login methods === */
+.auth-tabs{display:flex;gap:0.5rem;justify-content:center;margin-bottom:1.2rem;}
+.auth-tab{flex:1;padding:0.55rem 0.4rem;border:1.5px solid var(--blue-light);background:var(--white);color:var(--blue-dark);border-radius:999px;font-family:'Inter',sans-serif;font-size:0.78rem;font-weight:500;cursor:pointer;transition:all 0.2s;}
+.auth-tab.active{background:linear-gradient(135deg,var(--blue-mid),var(--blue-dark));color:var(--white);border-color:transparent;box-shadow:0 2px 8px rgba(107,140,174,0.3);}
+.auth-tab:hover:not(.active){background:rgba(143,168,200,0.08);}
+.auth-panel{display:none;}
+.auth-panel.active{display:block;animation:fadeIn 0.3s ease;}
+.magic-sent{text-align:center;padding:1.5rem 1rem;background:linear-gradient(135deg,rgba(91,156,107,0.08),rgba(91,156,107,0.03));border:1.5px solid var(--success);border-radius:12px;margin-bottom:1rem;}
+.magic-sent h4{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--ink);margin-bottom:0.3rem;}
+.magic-sent p{font-size:0.82rem;color:var(--ink-muted);line-height:1.5;}
+.or-divider{display:flex;align-items:center;gap:0.8rem;margin:1rem 0;color:var(--ink-light);font-size:0.75rem;}
+.or-divider::before,.or-divider::after{content:"";flex:1;height:1px;background:rgba(143,168,200,0.25);}
+.toggle-auth{font-size:0.8rem;color:var(--blue-dark);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;display:block;margin:0.6rem auto 0;}
+.toggle-auth:hover{color:var(--blue-mid);}
 
 </style>
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode.js/1.5.3/qrcode.min.js"></script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <base target="_blank">
 </head>
 <body>
@@ -290,29 +289,35 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
       <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     </div>
     <h2>Admin Login</h2>
-    <p>Sign in with your admin account to create and manage graduation invitations.</p>
-    <input type="email" class="login-input" id="login-email" placeholder="Email" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <input type="password" class="login-input" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-    <div id="turnstile-container" style="display:flex;justify-content:center;margin-bottom:1rem;"></div>
-    <div class="login-error" id="login-error"></div>
-    <div class="captcha-status" id="captcha-status"></div>
-    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
-    <button class="skip-captcha-btn" id="skip-captcha-btn" style="display:none;" onclick="skipCaptcha()">Skip verification for now</button>
-    <button class="troubleshoot-link" onclick="document.getElementById('ts-modal').classList.add('active')">Troubleshoot</button>
-    <div class="hint">Admin accounts are created in the Supabase dashboard — there is no default password.</div>
-  </div>
-</div>
+    <p>Sign in to create and manage graduation invitations.</p>
 
-<!-- Troubleshoot Modal -->
-<div class="ts-modal" id="ts-modal" onclick="if(event.target===this)document.getElementById('ts-modal').classList.remove('active')">
-  <div class="ts-box">
-    <h3>Troubleshoot Sign-In</h3>
-    <ol>
-      <li><strong>CAPTCHA not showing?</strong> The Cloudflare widget loads asynchronously. Wait a few seconds on slow connections.</li>
-      <li><strong>Ad blocker or VPN?</strong> Privacy tools may block Turnstile. Try disabling them for this site.</li>
-      <li><strong>Still stuck?</strong> Click "Skip verification for now" below the Sign In button to log in without CAPTCHA.</li>
-    </ol>
-    <button class="close-ts" onclick="document.getElementById('ts-modal').classList.remove('active')">Got it</button>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-magic" onclick="switchAuth('magic')">Magic Link</button>
+      <button class="auth-tab" id="tab-password" onclick="switchAuth('password')">Password</button>
+    </div>
+
+    <!-- Magic Link Panel -->
+    <div class="auth-panel active" id="panel-magic">
+      <input type="email" class="login-input" id="magic-email" placeholder="your@email.com" autocomplete="email" onkeydown="if(event.key==='Enter')sendMagicLink()">
+      <div class="login-error" id="magic-error"></div>
+      <div class="magic-sent" id="magic-sent" style="display:none;">
+        <h4>📧 Check your email</h4>
+        <p>We sent a magic link to <strong id="magic-sent-email"></strong>.<br>Click the link to log in instantly.<br><small>(Don't forget to check spam/junk)</small></p>
+      </div>
+      <button class="login-btn" id="magic-btn" onclick="sendMagicLink()">Send Magic Link</button>
+      <button class="toggle-auth" onclick="switchAuth('password')">Or sign in with password →</button>
+    </div>
+
+    <!-- Password Panel -->
+    <div class="auth-panel" id="panel-password">
+      <input type="email" class="login-input" id="login-email" placeholder="Email" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      <input type="password" class="login-input" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="login-error" id="login-error"></div>
+      <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
+      <button class="toggle-auth" onclick="switchAuth('magic')">← Back to Magic Link</button>
+    </div>
+
+    <div class="hint">Admin accounts are created in the Supabase dashboard.</div>
   </div>
 </div>
 
@@ -1043,69 +1048,73 @@ try{
 let currentSession = null;
 
 if(supabaseClient){
-  supabaseClient.auth.onAuthStateChange((_event, session)=>{
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
     currentSession = session;
+    if(event === 'SIGNED_IN' && session){
+      hideLogin();
+      showAdminBar();
+      resetIdleTimer();
+      showToast('Welcome back, Admin');
+      // Clean up any magic-link tokens from URL
+      if(location.hash.includes('access_token') || location.hash.includes('type=magiclink')){
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+    }
   });
 }
 
-/* ---------- Login CAPTCHA (Cloudflare Turnstile) ---------- */
-let turnstileWidgetId = null;
-let turnstileToken = '';
-let turnstileReady = false;
+/* ---------- Auth Helpers ---------- */
+let currentAuthMode = 'magic';
 
-function renderTurnstile(){
-  const el = document.getElementById('turnstile-container');
-  const status = document.getElementById('captcha-status');
-  if(!el || !TURNSTILE_SITE_KEY){ if(status) status.textContent=''; return; }
-
-  // If turnstile library isn't loaded yet, wait for it
-  if(typeof turnstile === 'undefined'){
-    if(status) status.textContent='Loading verification widget…';
-    return;
-  }
-
-  // Use turnstile.ready() if available (guarantees render after load)
-  if(typeof turnstile.ready === 'function' && !turnstileReady){
-    turnstile.ready(function(){
-      turnstileReady = true;
-      actuallyRenderTurnstile();
-    });
-    if(status) status.textContent='Initializing verification…';
-    return;
-  }
-
-  actuallyRenderTurnstile();
+function switchAuth(mode){
+  currentAuthMode = mode;
+  document.querySelectorAll('.auth-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.auth-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+mode).classList.add('active');
+  document.getElementById('panel-'+mode).classList.add('active');
+  // Clear errors
+  document.getElementById('login-error').textContent='';
+  document.getElementById('magic-error').textContent='';
 }
 
-function actuallyRenderTurnstile(){
-  const el = document.getElementById('turnstile-container');
-  const status = document.getElementById('captcha-status');
-  if(!el) return;
-  if(turnstileWidgetId !== null){ try{ turnstile.reset(turnstileWidgetId); }catch(e){ turnstileWidgetId=null; } if(turnstileWidgetId!==null) return; }
+async function sendMagicLink(){
+  const emailInput = document.getElementById('magic-email');
+  const err = document.getElementById('magic-error');
+  const btn = document.getElementById('magic-btn');
+  const sentBox = document.getElementById('magic-sent');
+  const sentEmail = document.getElementById('magic-sent-email');
+  const email = emailInput.value.trim();
+
+  if(!supabaseClient){ err.textContent='Cannot reach auth service.'; return; }
+  if(!email){ err.textContent='Enter your email address.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  err.textContent = '';
+
   try{
-    turnstileWidgetId = turnstile.render(el, {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: function(token){ turnstileToken=token; if(status){status.textContent='✓ Verification complete'; status.className='captcha-status ok';} },
-      'expired-callback': function(){ turnstileToken=''; if(status){status.textContent='Expired. Refreshing…'; status.className='captcha-status';} renderTurnstile(); },
-      'error-callback': function(){ turnstileToken=''; if(status){status.textContent='⚠️ Error. You may skip below.'; status.className='captcha-status error';} document.getElementById('skip-captcha-btn').style.display='block'; }
+    const {error} = await supabaseClient.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: location.href }
     });
-    if(status){ status.textContent='Complete the check above ↑'; status.className='captcha-status'; }
+    if(error){
+      err.textContent = error.message || 'Could not send magic link.';
+      btn.disabled = false;
+      btn.textContent = 'Send Magic Link';
+      return;
+    }
+    // Success
+    sentEmail.textContent = email;
+    sentBox.style.display = 'block';
+    btn.textContent = 'Resend Link';
+    btn.disabled = false;
+    showToast('Magic link sent! Check your email.');
   }catch(e){
-    console.error('Turnstile render error:', e);
-    if(status){ status.textContent='⚠️ Could not load. Skip below.'; status.className='captcha-status error'; }
-    document.getElementById('skip-captcha-btn').style.display='block';
+    console.error(e);
+    err.textContent = 'Something went wrong. Try again.';
+    btn.disabled = false;
+    btn.textContent = 'Send Magic Link';
   }
-}
-
-function skipCaptcha(){
-  turnstileToken = 'skipped';
-  const status = document.getElementById('captcha-status');
-  const skipBtn = document.getElementById('skip-captcha-btn');
-  const el = document.getElementById('turnstile-container');
-  if(status){ status.textContent='Verification skipped for this session.'; status.className='captcha-status warn'; }
-  if(skipBtn) skipBtn.style.display='none';
-  if(el) el.innerHTML = '<div style="padding:0.5rem;font-size:0.75rem;color:var(--ink-light);text-align:center;border:1px dashed var(--blue-light);border-radius:8px;">CAPTCHA skipped</div>';
-  showToast('You may now sign in without verification');
 }
 
 /* ---------- Failed-login lockout (client-side deterrent) ----------
@@ -1204,19 +1213,8 @@ function isAdmin(){
 
 function showLogin(){
   document.getElementById('login-screen').classList.remove('hidden');
-  turnstileReady = false;
-  const status = document.getElementById('captcha-status');
-  const skipBtn = document.getElementById('skip-captcha-btn');
-  if(status){ status.textContent=''; status.className='captcha-status'; }
-  if(skipBtn) skipBtn.style.display='none';
-  setTimeout(renderTurnstile, 100);
-  // Always show skip button after 5s as a safety net
-  setTimeout(function(){
-    if(!turnstileToken && skipBtn && skipBtn.style.display==='none'){
-      skipBtn.style.display='block';
-      if(status && !status.textContent.includes('Skipped')){ status.textContent='Still loading? Skip below ↓'; status.className='captcha-status warn'; }
-    }
-  }, 5000);
+  switchAuth('magic');
+  document.getElementById('magic-sent').style.display = 'none';
   checkLockoutUI();
 }
 function hideLogin(){document.getElementById('login-screen').classList.add('hidden');}
@@ -1239,34 +1237,26 @@ async function doLogin(){
   if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
   if(checkLockoutUI())return;
   if(!email||!pass){err.textContent='Enter your email and password';return;}
-  if(TURNSTILE_SITE_KEY && !turnstileToken){
-    err.textContent='Please complete the verification check, or click Skip below.';
-    document.getElementById('skip-captcha-btn').style.display='block';
-    return;
-  }
   loginInFlight=true;
   if(btn){btn.disabled=true;btn.textContent='Signing in…';}
   try{
-    const signInOpts={email,password:pass};
-    // Only send real captcha token (not 'skipped')
-    if(TURNSTILE_SITE_KEY && turnstileToken && turnstileToken!=='skipped'){
-      signInOpts.options={captchaToken:turnstileToken};
-    }
-    const {data,error}=await supabaseClient.auth.signInWithPassword(signInOpts);
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
     if(error){
       recordFailedLogin();
-      turnstileToken='';
-      if(turnstileWidgetId!==null && typeof turnstile!=='undefined'){ try{turnstile.reset(turnstileWidgetId);}catch(e){} }
       const locked=checkLockoutUI();
       if(!locked)err.textContent='Incorrect email or password.';
-      passInput.value=''; passInput.focus();
+      passInput.value='';
+      passInput.focus();
       return;
     }
     clearLoginAttempts();
     currentSession=data.session;
     err.textContent='';
-    emailInput.value=''; passInput.value='';
-    hideLogin(); showAdminBar(); resetIdleTimer();
+    emailInput.value='';
+    passInput.value='';
+    hideLogin();
+    showAdminBar();
+    resetIdleTimer();
     showToast('Welcome back, Admin');
   }catch(e){
     console.error(e);
@@ -1453,6 +1443,11 @@ window.addEventListener('DOMContentLoaded',async ()=>{
     }catch(e){console.error('Auth init error',e);}
   }
 
+  // Clean Supabase magic-link hash before checking invitation hashes
+  if(location.hash.includes('access_token') || location.hash.includes('type=magiclink')){
+    // Magic link tokens are consumed by getSession() above; clean URL
+    history.replaceState(null, '', location.pathname + location.search);
+  }
   const hash=location.hash.slice(1); // Remove the #
 
   // Check for short URL format (inv_XXXXXX) - resolved from shared backend storage
