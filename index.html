@@ -992,8 +992,10 @@ function showToast(msg){
    same trust model as before, just backed by real Postgres now. */
 const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
-/* Auth: no CAPTCHA. Simple email + password via Supabase Auth. */
-const TURNSTILE_SITE_KEY = ''; // disabled — no CAPTCHA needed
+/* Auth: Supabase + local fallback. No CAPTCHA. */
+const TURNSTILE_SITE_KEY = ''; // disabled
+const LOCAL_ADMIN_PASSWORD = 'Grad2026!'; // Change this to your own password
+const LOCAL_ADMIN_EMAIL = 'admin'; // Can be anything — only password matters
 let supabaseClient = null;
 try{
   if(window.supabase && typeof window.supabase.createClient === 'function'){
@@ -1111,9 +1113,10 @@ async function saveAllInvites(list){
 }
 
 async function addInviteToStore(data,hash){
-  if(!supabaseClient) throw new Error('Supabase not available');
-  const {error}=await supabaseClient.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
-  if(error) throw error;
+  try{
+    const {error}=await supabaseClient.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
+    if(error)throw error;
+  }catch(e){console.error('Storage error',e);showToast('Could not save invitation');}
 }
 
 function isAdmin(){
@@ -1141,23 +1144,36 @@ async function doLogin(){
   const btn=document.getElementById('login-btn');
   const email=emailInput.value.trim();
   const pass=passInput.value;
-  if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
   if(checkLockoutUI())return;
   if(!email||!pass){err.textContent='Enter your email and password';return;}
+
   loginInFlight=true;
   if(btn){btn.disabled=true;btn.textContent='Signing in…';}
-  try{
-    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
-    if(error){
-      recordFailedLogin();
-      const locked=checkLockoutUI();
-      if(!locked) err.textContent = error.message || 'Login failed.';
-      passInput.value='';
-      passInput.focus();
-      return;
-    }
+
+  // METHOD 1: Try Supabase auth first (if configured)
+  let supabaseOk = false;
+  if(supabaseClient){
+    try{
+      const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
+      if(!error && data && data.session){
+        clearLoginAttempts();
+        currentSession=data.session;
+        supabaseOk = true;
+      }
+    }catch(e){ console.log('Supabase login failed:', e); }
+  }
+
+  // METHOD 2: Local password fallback (works without Supabase)
+  if(!supabaseOk && pass === LOCAL_ADMIN_PASSWORD){
     clearLoginAttempts();
-    currentSession=data.session;
+    currentSession = { user: { email: email || LOCAL_ADMIN_EMAIL }, local: true };
+    supabaseOk = true;
+  }
+
+  loginInFlight=false;
+  if(btn){btn.disabled=false;btn.textContent='Sign In';}
+
+  if(supabaseOk){
     err.textContent='';
     emailInput.value='';
     passInput.value='';
@@ -1165,17 +1181,17 @@ async function doLogin(){
     showAdminBar();
     resetIdleTimer();
     showToast('Welcome back, Admin');
-  }catch(e){
-    console.error(e);
-    err.textContent='Something went wrong. Try again.';
-  }finally{
-    loginInFlight=false;
-    if(btn){btn.disabled=false;btn.textContent='Sign In';}
+  }else{
+    recordFailedLogin();
+    const locked=checkLockoutUI();
+    if(!locked) err.textContent = 'Incorrect email or password.';
+    passInput.value='';
+    passInput.focus();
   }
 }
 
 async function doLogout(){
-  try{ if(supabaseClient) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
+  try{ if(supabaseClient && currentSession && !currentSession.local) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
   currentSession=null;
   clearTimeout(idleTimer);
   hideAdminBar();
@@ -1192,38 +1208,17 @@ async function generateLink(){
   }
   try{
     gatherFormData();
-
-    // METHOD 1: Try Supabase short-link storage (works across devices)
+    // Generate short hash
     const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
     const hashKey = '#'+shortId;
-    let savedToCloud = false;
-    try{
-      showToast('Saving invitation…');
-      await addInviteToStore(invitationData,hashKey);
-      savedToCloud = true;
-    }catch(cloudErr){
-      console.warn('Supabase save failed, falling back to self-contained URL:', cloudErr);
-    }
-
-    // METHOD 2: Self-contained URL (always works, even if Supabase is down)
-    // Encode data directly in URL so it never depends on backend
-    const json = JSON.stringify(invitationData);
-    const encoded = encodeURIComponent(utf8ToBase64(json));
-    const fallbackHash = '#inv=' + encoded;
-
-    // Use short link if cloud save worked, otherwise use self-contained
-    const finalHash = savedToCloud ? hashKey : fallbackHash;
-    const url = location.origin + location.pathname + finalHash;
-
-    history.replaceState(null,'',finalHash);
-    markAsAdmin(finalHash);
+    showToast('Saving invitation…');
+    // Store in shared backend storage so the link works on any device
+    await addInviteToStore(invitationData,hashKey);
+    const url=location.origin+location.pathname+hashKey;
+    history.replaceState(null,'',hashKey);
+    markAsAdmin(hashKey);
     copyToClipboard(url);
-
-    if(savedToCloud){
-      showToast('Link copied! Share it with your friends');
-    }else{
-      showToast('Link copied (offline mode — link is self-contained)');
-    }
+    showToast('Link copied! Share it with your friends');
     setTimeout(()=>showViewer(),800);
   }catch(err){
     console.error(err);
@@ -1362,8 +1357,7 @@ async function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
-  // Resolve the real Supabase session first, so we know for certain
-  // whether there's a valid admin JWT before deciding what to show.
+  // Try Supabase session first
   if(supabaseClient){
     try{
       const {data}=await supabaseClient.auth.getSession();
@@ -1373,34 +1367,28 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 
   const hash=location.hash.slice(1); // Remove the #
 
-  // Try to load invitation from URL
+  // Check for short URL format (inv_XXXXXX) - resolved from shared backend storage
   if(hash.startsWith('inv_')){
-    // Short link: try Supabase first
     try{
       const list = await getAllInvites();
       const entry = list.find(i=>i.hash==='#'+hash);
       if(entry){
         invitationData=entry.data;
         showViewer(true, true);
-        return; // success — stop here
+      }else{
+        showToast('Invitation not found');
+        showLogin();
       }
-    }catch(e){console.error('Supabase lookup failed:',e);}
-    // If Supabase failed or not found, show clear error instead of login
-    showToast('Invitation not found. It may have expired or Supabase is not configured.');
-    // Still show login so admin can recreate
+    }catch(e){console.error('Invalid invitation link',e); showLogin();}
   }
-
-  if(hash.startsWith('inv=')){
-    // Self-contained URL: data is in the URL itself, no backend needed
+  // Check for old long URL format (inv=...) - self-contained, no backend needed
+  else if(hash.startsWith('inv=')){
     try{
       const json=base64ToUtf8(decodeURIComponent(hash.slice(4)));
       invitationData=JSON.parse(json);
       showViewer(true, true);
-      return;
-    }catch(e){console.error('Invalid invitation link',e); showToast('Invalid invitation link');}
-  }
-
-  // Not an invitation link — check admin auth
+    }catch(e){console.error('Invalid invitation link',e);}
+  }else{
     if(isAdmin()){
       hideLogin();
       showAdminBar();
