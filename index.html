@@ -994,8 +994,8 @@ const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
 /* Auth: Supabase + local fallback. No CAPTCHA. */
 const TURNSTILE_SITE_KEY = ''; // disabled
-const LOCAL_ADMIN_PASSWORD = 'Grad2026!'; // Change this to your own password
-const LOCAL_ADMIN_EMAIL = 'admin'; // Can be anything — only password matters
+const LOCAL_ADMIN_PASSWORD = 'Grad2026!'; // Change this
+const LOCAL_SESSION_KEY = 'gradLocalSession'; // Persist local auth
 let supabaseClient = null;
 try{
   if(window.supabase && typeof window.supabase.createClient === 'function'){
@@ -1146,34 +1146,33 @@ async function doLogin(){
   const pass=passInput.value;
   if(checkLockoutUI())return;
   if(!email||!pass){err.textContent='Enter your email and password';return;}
-
   loginInFlight=true;
   if(btn){btn.disabled=true;btn.textContent='Signing in…';}
 
-  // METHOD 1: Try Supabase auth first (if configured)
-  let supabaseOk = false;
+  let authOk = false;
+  // Try Supabase first
   if(supabaseClient){
     try{
       const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
       if(!error && data && data.session){
         clearLoginAttempts();
         currentSession=data.session;
-        supabaseOk = true;
+        authOk = true;
       }
-    }catch(e){ console.log('Supabase login failed:', e); }
+    }catch(e){}
   }
-
-  // METHOD 2: Local password fallback (works without Supabase)
-  if(!supabaseOk && pass === LOCAL_ADMIN_PASSWORD){
+  // Local fallback
+  if(!authOk && pass === LOCAL_ADMIN_PASSWORD){
     clearLoginAttempts();
-    currentSession = { user: { email: email || LOCAL_ADMIN_EMAIL }, local: true };
-    supabaseOk = true;
+    currentSession = { user: { email: email }, local: true, expiresAt: Date.now() + 24*60*60*1000 };
+    try{ localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(currentSession)); }catch(e){}
+    authOk = true;
   }
 
   loginInFlight=false;
   if(btn){btn.disabled=false;btn.textContent='Sign In';}
 
-  if(supabaseOk){
+  if(authOk){
     err.textContent='';
     emailInput.value='';
     passInput.value='';
@@ -1192,6 +1191,7 @@ async function doLogin(){
 
 async function doLogout(){
   try{ if(supabaseClient && currentSession && !currentSession.local) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
+  try{ localStorage.removeItem(LOCAL_SESSION_KEY); }catch(e){}
   currentSession=null;
   clearTimeout(idleTimer);
   hideAdminBar();
@@ -1206,23 +1206,49 @@ async function generateLink(){
     showToast('Admin login required to generate invitations');
     return;
   }
+  // Immediately transition to viewer so user never sees login flash
+  hideLogin();
+  hideAdminBar();
+  showToast('Creating your invitation…');
+
   try{
     gatherFormData();
-    // Generate short hash
+
+    // Try cloud save first
     const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
     const hashKey = '#'+shortId;
-    showToast('Saving invitation…');
-    // Store in shared backend storage so the link works on any device
-    await addInviteToStore(invitationData,hashKey);
-    const url=location.origin+location.pathname+hashKey;
-    history.replaceState(null,'',hashKey);
-    markAsAdmin(hashKey);
+    let savedToCloud = false;
+    try{
+      await addInviteToStore(invitationData,hashKey);
+      savedToCloud = true;
+    }catch(cloudErr){ console.warn('Cloud save failed:', cloudErr); }
+
+    // Always create self-contained fallback URL (works without Supabase)
+    const json = JSON.stringify(invitationData);
+    const encoded = encodeURIComponent(utf8ToBase64(json));
+    const fallbackHash = '#inv=' + encoded;
+    const finalHash = savedToCloud ? hashKey : fallbackHash;
+
+    const url = location.origin + location.pathname + finalHash;
+    history.replaceState(null,'',finalHash);
+    markAsAdmin(finalHash);
     copyToClipboard(url);
-    showToast('Link copied! Share it with your friends');
-    setTimeout(()=>showViewer(),800);
+
+    if(savedToCloud){
+      showToast('Link copied! Share it with your friends');
+    }else{
+      showToast('Link copied (self-contained mode)');
+    }
+
+    // Show viewer immediately — no setTimeout, no flash
+    showViewer();
   }catch(err){
     console.error(err);
     showToast('Error: '+(err.message||'Could not create link'));
+    // On error, go back to editor since we hid it already
+    document.getElementById('viewer-view').style.display = 'none';
+    document.getElementById('editor-view').style.display = 'block';
+    if(isAdmin()) showAdminBar();
   }
 }
 
@@ -1357,12 +1383,22 @@ async function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
-  // Try Supabase session first
+  // Resolve the real Supabase session first, so we know for certain
+  // whether there's a valid admin JWT before deciding what to show.
   if(supabaseClient){
     try{
       const {data}=await supabaseClient.auth.getSession();
       currentSession=data.session;
     }catch(e){console.error('Auth init error',e);}
+  }
+  // Restore local auth session if Supabase session is missing
+  if(!currentSession){
+    try{
+      const localSess = JSON.parse(localStorage.getItem(LOCAL_SESSION_KEY));
+      if(localSess && localSess.expiresAt > Date.now()){
+        currentSession = localSess;
+      }
+    }catch(e){}
   }
 
   const hash=location.hash.slice(1); // Remove the #
