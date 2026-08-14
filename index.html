@@ -979,10 +979,10 @@ function showToast(msg){
    same trust model as before, just backed by real Postgres now. */
 const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
-let supabase = null;
+let supabaseClient = null;
 try{
   if(window.supabase && typeof window.supabase.createClient === 'function'){
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }else{
     console.error('Supabase library failed to load (ad blocker or network issue?) — falling back to local-only mode.');
   }
@@ -1006,7 +1006,7 @@ async function sha256(str){
 
 async function getAdminCfg(){
   try{
-    const {data,error}=await supabase.from('admin_config').select('*').eq('id',1).maybeSingle();
+    const {data,error}=await supabaseClient.from('admin_config').select('*').eq('id',1).maybeSingle();
     if(error)throw error;
     if(data)return {passwordHash:data.password_hash,createdAt:new Date(data.created_at).getTime()};
   }catch(e){console.error('Storage error',e);}
@@ -1014,14 +1014,14 @@ async function getAdminCfg(){
 }
 async function saveAdminCfg(cfg){
   try{
-    const {error}=await supabase.from('admin_config').upsert({id:1,password_hash:cfg.passwordHash});
+    const {error}=await supabaseClient.from('admin_config').upsert({id:1,password_hash:cfg.passwordHash});
     if(error)throw error;
   }catch(e){console.error('Storage error',e);showToast('Could not save admin settings');}
 }
 
 async function getAllInvites(){
   try{
-    const {data,error}=await supabase.from('invitations').select('*').order('created_at',{ascending:false});
+    const {data,error}=await supabaseClient.from('invitations').select('*').order('created_at',{ascending:false});
     if(error)throw error;
     return (data||[]).map(r=>({hash:r.hash,data:r.data,createdAt:new Date(r.created_at).getTime(),updatedAt:new Date(r.updated_at).getTime()}));
   }catch(e){console.error('Storage error',e);}
@@ -1031,14 +1031,14 @@ async function saveAllInvites(list){
   try{
     if(!list.length)return;
     const rows=list.map(i=>({hash:i.hash,data:i.data,created_at:new Date(i.createdAt||Date.now()).toISOString(),updated_at:new Date(i.updatedAt||Date.now()).toISOString()}));
-    const {error}=await supabase.from('invitations').upsert(rows);
+    const {error}=await supabaseClient.from('invitations').upsert(rows);
     if(error)throw error;
   }catch(e){console.error('Storage error',e);showToast('Could not save invitations');}
 }
 
 async function addInviteToStore(data,hash){
   try{
-    const {error}=await supabase.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
+    const {error}=await supabaseClient.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
     if(error)throw error;
   }catch(e){console.error('Storage error',e);showToast('Could not save invitation');}
 }
@@ -1188,7 +1188,7 @@ function dashCopy(hash){
 async function dashDelete(hash){
   if(!confirm('Delete this invitation permanently?'))return;
   try{
-    const {error}=await supabase.from('invitations').delete().eq('hash',hash);
+    const {error}=await supabaseClient.from('invitations').delete().eq('hash',hash);
     if(error)throw error;
   }catch(e){console.error('Storage error',e);showToast('Could not delete invitation');return;}
   await renderDashboard();
@@ -1233,8 +1233,8 @@ async function changeAdminPassword(){
 async function resetSystem(){
   if(!confirm('WARNING: Delete ALL invitations and settings?'))return;
   if(!confirm('Are you absolutely sure? This is permanent.'))return;
-  try{await supabase.from('invitations').delete().not('hash','is',null);}catch(e){}
-  try{await supabase.from('admin_config').delete().eq('id',1);}catch(e){}
+  try{await supabaseClient.from('invitations').delete().not('hash','is',null);}catch(e){}
+  try{await supabaseClient.from('admin_config').delete().eq('id',1);}catch(e){}
   clearAdminSession();
   await renderDashboard();
   showToast('System reset complete');
