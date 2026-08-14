@@ -270,6 +270,7 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 <base target="_blank">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode.js/1.5.3/qrcode.min.js"></script>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -1110,10 +1111,9 @@ async function saveAllInvites(list){
 }
 
 async function addInviteToStore(data,hash){
-  try{
-    const {error}=await supabaseClient.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
-    if(error)throw error;
-  }catch(e){console.error('Storage error',e);showToast('Could not save invitation');}
+  if(!supabaseClient) throw new Error('Supabase not available');
+  const {error}=await supabaseClient.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
+  if(error) throw error;
 }
 
 function isAdmin(){
@@ -1192,17 +1192,38 @@ async function generateLink(){
   }
   try{
     gatherFormData();
-    // Generate short hash
+
+    // METHOD 1: Try Supabase short-link storage (works across devices)
     const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
     const hashKey = '#'+shortId;
-    showToast('Saving invitation…');
-    // Store in shared backend storage so the link works on any device
-    await addInviteToStore(invitationData,hashKey);
-    const url=location.origin+location.pathname+hashKey;
-    history.replaceState(null,'',hashKey);
-    markAsAdmin(hashKey);
+    let savedToCloud = false;
+    try{
+      showToast('Saving invitation…');
+      await addInviteToStore(invitationData,hashKey);
+      savedToCloud = true;
+    }catch(cloudErr){
+      console.warn('Supabase save failed, falling back to self-contained URL:', cloudErr);
+    }
+
+    // METHOD 2: Self-contained URL (always works, even if Supabase is down)
+    // Encode data directly in URL so it never depends on backend
+    const json = JSON.stringify(invitationData);
+    const encoded = encodeURIComponent(utf8ToBase64(json));
+    const fallbackHash = '#inv=' + encoded;
+
+    // Use short link if cloud save worked, otherwise use self-contained
+    const finalHash = savedToCloud ? hashKey : fallbackHash;
+    const url = location.origin + location.pathname + finalHash;
+
+    history.replaceState(null,'',finalHash);
+    markAsAdmin(finalHash);
     copyToClipboard(url);
-    showToast('Link copied! Share it with your friends');
+
+    if(savedToCloud){
+      showToast('Link copied! Share it with your friends');
+    }else{
+      showToast('Link copied (offline mode — link is self-contained)');
+    }
     setTimeout(()=>showViewer(),800);
   }catch(err){
     console.error(err);
@@ -1352,28 +1373,34 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 
   const hash=location.hash.slice(1); // Remove the #
 
-  // Check for short URL format (inv_XXXXXX) - resolved from shared backend storage
+  // Try to load invitation from URL
   if(hash.startsWith('inv_')){
+    // Short link: try Supabase first
     try{
       const list = await getAllInvites();
       const entry = list.find(i=>i.hash==='#'+hash);
       if(entry){
         invitationData=entry.data;
         showViewer(true, true);
-      }else{
-        showToast('Invitation not found');
-        showLogin();
+        return; // success — stop here
       }
-    }catch(e){console.error('Invalid invitation link',e); showLogin();}
+    }catch(e){console.error('Supabase lookup failed:',e);}
+    // If Supabase failed or not found, show clear error instead of login
+    showToast('Invitation not found. It may have expired or Supabase is not configured.');
+    // Still show login so admin can recreate
   }
-  // Check for old long URL format (inv=...) - self-contained, no backend needed
-  else if(hash.startsWith('inv=')){
+
+  if(hash.startsWith('inv=')){
+    // Self-contained URL: data is in the URL itself, no backend needed
     try{
       const json=base64ToUtf8(decodeURIComponent(hash.slice(4)));
       invitationData=JSON.parse(json);
       showViewer(true, true);
-    }catch(e){console.error('Invalid invitation link',e);}
-  }else{
+      return;
+    }catch(e){console.error('Invalid invitation link',e); showToast('Invalid invitation link');}
+  }
+
+  // Not an invitation link — check admin auth
     if(isAdmin()){
       hideLogin();
       showAdminBar();
