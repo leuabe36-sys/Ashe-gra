@@ -94,6 +94,11 @@ body.card-only-mode #admin-dashboard{display:none !important;}
 body.card-only-mode{background:var(--cream);}
 body.card-only-mode #viewer-view{display:flex !important;background:var(--cream);}
 body.card-only-mode .floral-bg{opacity:1;z-index:-1;}
+body.card-only-mode .envelope-wrap{width:min(240px,60vw);height:150px;}
+body.card-only-mode .envelope-card{padding:1rem;}
+body.card-only-mode .invitation-content h1{font-size:clamp(1.2rem,3vw,1.6rem) !important;}
+body.card-only-mode .invitation-content h2{font-size:clamp(1rem,2.5vw,1.3rem) !important;}
+body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !important;}
 .envelope-wrap{position:relative;width:min(320px,80vw);height:200px;cursor:pointer;perspective:1000px;}
 .envelope{position:relative;width:100%;height:100%;background:linear-gradient(135deg,var(--blue-mid) 0%,var(--blue-dark) 100%);border-radius:4px;box-shadow:0 20px 60px rgba(107,140,174,0.35);}
 .envelope::before{content:"";position:absolute;top:0;left:0;right:0;height:55%;background:linear-gradient(180deg,var(--blue-light) 0%,var(--blue-mid) 100%);clip-path:polygon(0 0,50% 100%,100% 0);transform-origin:top;transition:transform 0.6s cubic-bezier(0.4,0,0.2,1);z-index:3;}
@@ -1042,12 +1047,14 @@ function generateLink(){
   }
   try{
     gatherFormData();
-    const json=JSON.stringify(invitationData);
-    const encoded=encodeURIComponent(utf8ToBase64(json));
-    const url=location.origin+location.pathname+'#inv='+encoded;
-    history.replaceState(null,'','#inv='+encoded);
-    markAsAdmin('#inv='+encoded);
-    addInviteToStore(invitationData,'#inv='+encoded);
+    // Generate short hash
+    const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    // Store in localStorage
+    localStorage.setItem(shortId, JSON.stringify(invitationData));
+    const url=location.origin+location.pathname+'#'+shortId;
+    history.replaceState(null,'','#'+shortId);
+    markAsAdmin('#'+shortId);
+    addInviteToStore(invitationData,'#'+shortId);
     copyToClipboard(url);
     showToast('Link copied! Share it with your friends');
     setTimeout(()=>showViewer(),800);
@@ -1172,10 +1179,25 @@ function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',()=>{
-  const hash=location.hash;
-  if(hash&&hash.startsWith('#inv=')){
+  const hash=location.hash.slice(1); // Remove the #
+  
+  // Check for short URL format (inv_XXXXXX)
+  if(hash.startsWith('inv_')){
     try{
-      const json=base64ToUtf8(decodeURIComponent(hash.slice(5)));
+      const data = localStorage.getItem(hash);
+      if(data){
+        invitationData=JSON.parse(data);
+        showViewer(true, true);
+      }else{
+        showToast('Invitation not found');
+        showLogin();
+      }
+    }catch(e){console.error('Invalid invitation link',e); showLogin();}
+  }
+  // Check for old long URL format (inv=...)
+  else if(hash.startsWith('inv=')){
+    try{
+      const json=base64ToUtf8(decodeURIComponent(hash.slice(4)));
       invitationData=JSON.parse(json);
       showViewer(true, true);
     }catch(e){console.error('Invalid invitation link',e);}
