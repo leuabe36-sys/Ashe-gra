@@ -272,11 +272,12 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
       <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     </div>
     <h2>Admin Login</h2>
-    <p>Enter your password to create and manage graduation invitations.</p>
-    <input type="password" class="login-input" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    <p>Sign in with your admin account to create and manage graduation invitations.</p>
+    <input type="email" class="login-input" id="login-email" placeholder="Email" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+    <input type="password" class="login-input" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-error" id="login-error"></div>
-    <button class="login-btn" onclick="doLogin()">Sign In</button>
-    <div class="hint">Default password: <strong>admin123</strong></div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="hint">Admin accounts are created in the Supabase dashboard — there is no default password.</div>
   </div>
 </div>
 
@@ -286,7 +287,7 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     Admin
   </span>
-  <span class="admin-name">Logged in as Administrator</span>
+  <span class="admin-name" id="admin-email-label">Logged in as Administrator</span>
   <div class="admin-actions">
     <button onclick="openAdminDashboard()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:0.2rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -328,8 +329,8 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
       <h3>Settings</h3>
       <div class="card">
         <div class="form-grid">
-          <div class="form-group full"><label>Change Admin Password</label><input type="password" id="new-admin-pass" placeholder="New password (min 4 chars)"></div>
-          <div class="form-group full"><input type="password" id="confirm-admin-pass" placeholder="Confirm new password"></div>
+          <div class="form-group full"><label>Change Admin Password</label><input type="password" id="new-admin-pass" placeholder="New password (min 8 chars)" autocomplete="new-password"></div>
+          <div class="form-group full"><input type="password" id="confirm-admin-pass" placeholder="Confirm new password" autocomplete="new-password"></div>
         </div>
         <button class="btn-secondary" onclick="changeAdminPassword()" style="margin-top:0.8rem;">Update Password</button>
       </div>
@@ -990,33 +991,20 @@ try{
   console.error('Supabase init failed — falling back to local-only mode.',e);
 }
 
-const ADMIN_SESS_KEY = 'gradInviteAdminSess';
-const DEFAULT_PASS = 'admin123';
+/* Admin auth now runs entirely on Supabase Auth (GoTrue). The admin
+   account is created ahead of time in the Supabase dashboard (or via
+   the SQL/CLI), not from this page. Row Level Security policies on
+   the `invitations` table only allow writes from an authenticated
+   session, and Supabase disallows public self-signup for this project
+   (see setup notes), so login can no longer be bypassed by reading the
+   anon key out of the page source or calling functions from the
+   console — every write is checked server-side against a real JWT. */
+let currentSession = null;
 
-async function sha256(str){
-  try{
-    const buf = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest('SHA-256', buf);
-    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }catch(e){
-    let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h=h&h;}
-    return 'fb_'+Math.abs(h).toString(16);
-  }
-}
-
-async function getAdminCfg(){
-  try{
-    const {data,error}=await supabaseClient.from('admin_config').select('*').eq('id',1).maybeSingle();
-    if(error)throw error;
-    if(data)return {passwordHash:data.password_hash,createdAt:new Date(data.created_at).getTime()};
-  }catch(e){console.error('Storage error',e);}
-  return {passwordHash:null,createdAt:Date.now()};
-}
-async function saveAdminCfg(cfg){
-  try{
-    const {error}=await supabaseClient.from('admin_config').upsert({id:1,password_hash:cfg.passwordHash});
-    if(error)throw error;
-  }catch(e){console.error('Storage error',e);showToast('Could not save admin settings');}
+if(supabaseClient){
+  supabaseClient.auth.onAuthStateChange((_event, session)=>{
+    currentSession = session;
+  });
 }
 
 async function getAllInvites(){
@@ -1044,56 +1032,59 @@ async function addInviteToStore(data,hash){
 }
 
 function isAdmin(){
-  try{
-    const s=sessionStorage.getItem(ADMIN_SESS_KEY);
-    if(!s)return false;
-    const d=JSON.parse(s);
-    return d.expires>Date.now();
-  }catch(e){return false;}
+  return !!(currentSession && currentSession.user);
 }
-
-function setAdminSession(){
-  sessionStorage.setItem(ADMIN_SESS_KEY,JSON.stringify({expires:Date.now()+30*60*1000}));
-}
-function clearAdminSession(){sessionStorage.removeItem(ADMIN_SESS_KEY);}
 
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');}
 function hideLogin(){document.getElementById('login-screen').classList.add('hidden');}
-function showAdminBar(){document.getElementById('admin-bar').classList.add('active');}
+function showAdminBar(){
+  document.getElementById('admin-bar').classList.add('active');
+  const label=document.getElementById('admin-email-label');
+  if(label)label.textContent='Logged in as '+(currentSession&&currentSession.user&&currentSession.user.email||'Administrator');
+}
 function hideAdminBar(){document.getElementById('admin-bar').classList.remove('active');}
 
+let loginInFlight=false;
 async function doLogin(){
-  const input=document.getElementById('login-password');
+  if(loginInFlight)return;
+  const emailInput=document.getElementById('login-email');
+  const passInput=document.getElementById('login-password');
   const err=document.getElementById('login-error');
-  const pass=input.value.trim();
-  if(!pass){err.textContent='Enter a password';return;}
-  const cfg=await getAdminCfg();
-  const hash=await sha256(pass);
-  if(!cfg.passwordHash){
-    cfg.passwordHash=hash;
-    await saveAdminCfg(cfg);
-    setAdminSession();
+  const btn=document.getElementById('login-btn');
+  const email=emailInput.value.trim();
+  const pass=passInput.value;
+  if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
+  if(!email||!pass){err.textContent='Enter your email and password';return;}
+  loginInFlight=true;
+  if(btn){btn.disabled=true;btn.textContent='Signing in…';}
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
+    if(error){
+      // Generic message on purpose - don't reveal whether the email exists
+      err.textContent='Incorrect email or password.';
+      passInput.value='';
+      passInput.focus();
+      return;
+    }
+    currentSession=data.session;
     err.textContent='';
-    input.value='';
-    hideLogin();
-    showAdminBar();
-    showToast('Welcome, Admin. Password saved.');
-  }else if(cfg.passwordHash===hash){
-    setAdminSession();
-    err.textContent='';
-    input.value='';
+    emailInput.value='';
+    passInput.value='';
     hideLogin();
     showAdminBar();
     showToast('Welcome back, Admin');
-  }else{
-    err.textContent='Incorrect password. Try again.';
-    input.value='';
-    input.focus();
+  }catch(e){
+    console.error(e);
+    err.textContent='Something went wrong. Try again.';
+  }finally{
+    loginInFlight=false;
+    if(btn){btn.disabled=false;btn.textContent='Sign In';}
   }
 }
 
-function doLogout(){
-  clearAdminSession();
+async function doLogout(){
+  try{ if(supabaseClient) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
+  currentSession=null;
   hideAdminBar();
   showLogin();
   showToast('Logged out');
@@ -1196,7 +1187,7 @@ async function dashDelete(hash){
 }
 
 async function exportAllData(){
-  const data={exportedAt:new Date().toISOString(),version:'1.0',invitations:await getAllInvites(),config:await getAdminCfg()};
+  const data={exportedAt:new Date().toISOString(),version:'2.0',invitations:await getAllInvites()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='grad-invitations-backup-'+new Date().toISOString().slice(0,10)+'.json';
@@ -1210,7 +1201,6 @@ async function importData(){
   try{
     const data=JSON.parse(raw);
     if(data.invitations&&Array.isArray(data.invitations))await saveAllInvites(data.invitations);
-    if(data.config&&typeof data.config==='object')await saveAdminCfg(data.config);
     document.getElementById('import-json').value='';
     await renderDashboard();
     showToast('Backup imported successfully');
@@ -1218,31 +1208,47 @@ async function importData(){
 }
 
 async function changeAdminPassword(){
+  // Only ever reachable from inside the dashboard, which already requires
+  // isAdmin(), and Supabase Auth independently rejects updateUser() if the
+  // session isn't valid - so this can't be used to set a password without
+  // already being signed in as the admin.
+  if(!isAdmin()){showToast('You must be signed in as admin to do this');showLogin();return;}
   const p1=document.getElementById('new-admin-pass').value;
   const p2=document.getElementById('confirm-admin-pass').value;
-  if(!p1||p1.length<4){showToast('Password must be at least 4 characters');return;}
+  if(!p1||p1.length<8){showToast('Password must be at least 8 characters');return;}
   if(p1!==p2){showToast('Passwords do not match');return;}
-  const cfg=await getAdminCfg();
-  cfg.passwordHash=await sha256(p1);
-  await saveAdminCfg(cfg);
-  document.getElementById('new-admin-pass').value='';
-  document.getElementById('confirm-admin-pass').value='';
-  showToast('Admin password updated');
+  try{
+    const {error}=await supabaseClient.auth.updateUser({password:p1});
+    if(error)throw error;
+    document.getElementById('new-admin-pass').value='';
+    document.getElementById('confirm-admin-pass').value='';
+    showToast('Admin password updated');
+  }catch(e){
+    console.error(e);
+    showToast('Could not update password: '+(e.message||'unknown error'));
+  }
 }
 
 async function resetSystem(){
-  if(!confirm('WARNING: Delete ALL invitations and settings?'))return;
+  if(!isAdmin()){showToast('You must be signed in as admin to do this');showLogin();return;}
+  if(!confirm('WARNING: Delete ALL invitations?'))return;
   if(!confirm('Are you absolutely sure? This is permanent.'))return;
   try{await supabaseClient.from('invitations').delete().not('hash','is',null);}catch(e){}
-  try{await supabaseClient.from('admin_config').delete().eq('id',1);}catch(e){}
-  clearAdminSession();
   await renderDashboard();
-  showToast('System reset complete');
-  setTimeout(()=>{hideAdminBar();showLogin();},500);
+  showToast('All invitations deleted');
 }
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
+  // Resolve the real Supabase session first, so we know for certain
+  // whether there's a valid admin JWT before deciding what to show.
+  if(supabaseClient){
+    try{
+      const {data}=await supabaseClient.auth.getSession();
+      currentSession=data.session;
+    }catch(e){console.error('Auth init error',e);}
+  }
+
   const hash=location.hash.slice(1); // Remove the #
 
   // Check for short URL format (inv_XXXXXX) - resolved from shared backend storage
