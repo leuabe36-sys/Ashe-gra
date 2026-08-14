@@ -979,7 +979,16 @@ function showToast(msg){
    same trust model as before, just backed by real Postgres now. */
 const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
+try{
+  if(window.supabase && typeof window.supabase.createClient === 'function'){
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }else{
+    console.error('Supabase library failed to load (ad blocker or network issue?) — falling back to local-only mode.');
+  }
+}catch(e){
+  console.error('Supabase init failed — falling back to local-only mode.',e);
+}
 
 const ADMIN_SESS_KEY = 'gradInviteAdminSess';
 const DEFAULT_PASS = 'admin123';
