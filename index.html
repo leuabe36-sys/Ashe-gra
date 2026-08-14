@@ -274,8 +274,8 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 .verify-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
 .totp-error{color:var(--danger);font-size:0.8rem;margin-top:0.6rem;min-height:1.2rem;text-align:center;}
 .totp-success{color:var(--success);font-size:0.85rem;margin-top:0.6rem;text-align:center;font-weight:500;}
-.setup-panel,.login-panel{display:none;}
-.setup-panel.active,.login-panel.active{display:block;animation:fadeIn 0.4s ease;}
+.setup-panel,.login-panel{display:block;}
+.setup-panel.hidden,.login-panel.hidden{display:none !important;}
 .secret-url-hint{font-size:0.72rem;color:var(--ink-light);margin-top:1rem;text-align:center;line-height:1.5;}
 .secret-url-hint code{background:var(--cream);padding:0.2rem 0.5rem;border-radius:4px;font-family:monospace;font-size:0.7rem;}
 .reset-totp-btn{display:block;margin:0.8rem auto 0;font-size:0.75rem;color:var(--ink-light);background:none;border:none;text-decoration:underline;cursor:pointer;font-family:inherit;}
@@ -327,7 +327,7 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
     </div>
 
     <!-- LOGIN: Returning user — enter 6-digit code -->
-    <div class="login-panel" id="login-panel">
+    <div class="login-panel" id="login-panel" class="hidden">
       <p style="font-size:0.85rem;color:var(--ink-muted);line-height:1.5;margin-bottom:0.5rem;">
         Enter the 6-digit code from your authenticator app.
       </p>
@@ -1237,14 +1237,19 @@ function renderAdminQR(){
 
 /* --- Setup flow --- */
 function initTOTPSetup(){
-  adminTOTPSecret = generateRandomSecret();
-  try{ localStorage.setItem(ADMIN_TOTP_KEY, adminTOTPSecret); }catch(e){}
-  document.getElementById('setup-secret').textContent = adminTOTPSecret;
-  document.getElementById('manual-secret').textContent = adminTOTPSecret;
-  document.getElementById('setup-panel').classList.add('active');
-  document.getElementById('login-panel').classList.remove('active');
-  renderAdminQR();
-  document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+  try{
+    adminTOTPSecret = generateRandomSecret();
+    try{ localStorage.setItem(ADMIN_TOTP_KEY, adminTOTPSecret); }catch(e){}
+    document.getElementById('setup-secret').textContent = adminTOTPSecret;
+    document.getElementById('manual-secret').textContent = adminTOTPSecret;
+    document.getElementById('setup-panel').classList.remove('hidden');
+    document.getElementById('login-panel').classList.add('hidden');
+    renderAdminQR();
+    document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+  }catch(err){
+    console.error('TOTP setup error:', err);
+    document.getElementById('setup-error').textContent = 'Setup error: ' + err.message;
+  }
 }
 
 async function verifySetupCode(){
@@ -1254,15 +1259,22 @@ async function verifySetupCode(){
   if(code.length !== 6){ err.textContent = 'Enter all 6 digits.'; return; }
   btn.disabled = true;
   btn.textContent = 'Verifying…';
-  const ok = await verifyTOTP(adminTOTPSecret, code);
-  btn.disabled = false;
-  btn.textContent = 'Verify & Continue';
-  if(!ok){ err.textContent = 'Invalid code. Make sure your app clock is correct.'; clearTOTPInputs('setup-panel'); return; }
-  err.textContent = '';
-  createAdminSession();
-  hideLogin();
-  showAdminBar();
-  showToast('Admin access granted');
+  try{
+    const ok = await verifyTOTP(adminTOTPSecret, code);
+    btn.disabled = false;
+    btn.textContent = 'Verify & Continue';
+    if(!ok){ err.textContent = 'Invalid code. Make sure your app clock is correct.'; clearTOTPInputs('setup-panel'); return; }
+    err.textContent = '';
+    createAdminSession();
+    hideLogin();
+    showAdminBar();
+    showToast('Admin access granted');
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = 'Verify & Continue';
+    err.textContent = 'Error: ' + e.message;
+    console.error(e);
+  }
 }
 
 /* --- Login flow --- */
@@ -1273,15 +1285,22 @@ async function doTOTPLogin(){
   if(code.length !== 6){ err.textContent = 'Enter all 6 digits.'; return; }
   btn.disabled = true;
   btn.textContent = 'Verifying…';
-  const ok = await verifyTOTP(adminTOTPSecret, code);
-  btn.disabled = false;
-  btn.textContent = 'Verify Code';
-  if(!ok){ err.textContent = 'Invalid code. Try again.'; clearTOTPInputs('login-panel'); return; }
-  err.textContent = '';
-  createAdminSession();
-  hideLogin();
-  showAdminBar();
-  showToast('Welcome back, Admin');
+  try{
+    const ok = await verifyTOTP(adminTOTPSecret, code);
+    btn.disabled = false;
+    btn.textContent = 'Verify Code';
+    if(!ok){ err.textContent = 'Invalid code. Try again.'; clearTOTPInputs('login-panel'); return; }
+    err.textContent = '';
+    createAdminSession();
+    hideLogin();
+    showAdminBar();
+    showToast('Welcome back, Admin');
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = 'Verify Code';
+    err.textContent = 'Error: ' + e.message;
+    console.error(e);
+  }
 }
 
 function resetTOTP(){
@@ -1392,8 +1411,8 @@ function showLogin(){
     adminTOTPSecret = localStorage.getItem(ADMIN_TOTP_KEY);
   }catch(e){ adminTOTPSecret = null; }
   if(adminTOTPSecret){
-    document.getElementById('setup-panel').classList.remove('active');
-    document.getElementById('login-panel').classList.add('active');
+    document.getElementById('setup-panel').classList.add('hidden');
+    document.getElementById('login-panel').classList.remove('hidden');
     clearTOTPInputs('login-panel');
     document.getElementById('login-error').textContent = '';
     document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
