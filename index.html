@@ -258,31 +258,32 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 }
 
 
-/* Troubleshoot & CAPTCHA status */
-.troubleshoot-link{display:inline-block;margin-top:0.6rem;font-size:0.8rem;color:var(--blue-dark);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:'Inter',sans-serif;}
+/* === CAPTCHA & Troubleshoot UI === */
+.captcha-status{font-size:0.78rem;color:var(--ink-light);margin:0.5rem 0;text-align:center;min-height:1.4rem;transition:color 0.3s;}
+.captcha-status.error{color:var(--danger);font-weight:500;}
+.captcha-status.ok{color:var(--success);font-weight:500;}
+.captcha-status.warn{color:var(--gold-dark);font-weight:500;}
+.troubleshoot-link{display:block;margin:0.6rem auto 0;font-size:0.8rem;color:var(--blue-dark);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:'Inter',sans-serif;}
 .troubleshoot-link:hover{color:var(--blue-mid);}
-.captcha-status{font-size:0.75rem;color:var(--ink-light);margin:0.6rem 0;text-align:center;min-height:1.2rem;}
-.captcha-status.error{color:var(--danger);}
-.captcha-status.ok{color:var(--success);}
-.skip-captcha-btn{display:inline-block;margin-top:0.4rem;font-size:0.75rem;color:var(--ink-light);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:'Inter',sans-serif;}
+.skip-captcha-btn{display:block;margin:0.4rem auto 0;font-size:0.78rem;color:var(--ink-light);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:'Inter',sans-serif;transition:color 0.2s;}
 .skip-captcha-btn:hover{color:var(--danger);}
 
-/* Troubleshoot modal */
-.ts-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center;padding:1rem;}
+/* === Troubleshoot Modal === */
+.ts-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center;padding:1rem;animation:fadeIn 0.2s ease;}
 .ts-modal.active{display:flex;}
-.ts-box{background:var(--white);border-radius:16px;padding:2rem;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);border:1px solid rgba(143,168,200,0.2);}
+.ts-box{background:var(--white);border-radius:16px;padding:2rem;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);border:1px solid rgba(143,168,200,0.2);position:relative;}
 .ts-box h3{font-family:'Playfair Display',serif;font-size:1.3rem;margin-bottom:1rem;color:var(--ink);}
 .ts-box ol{margin-left:1.2rem;font-size:0.85rem;color:var(--ink-muted);line-height:1.8;}
-.ts-box ol li{margin-bottom:0.4rem;}
-.ts-box .close-ts{margin-top:1.5rem;width:100%;padding:0.7rem;background:var(--cream-dark);color:var(--ink);border:none;border-radius:999px;font-family:'Inter',sans-serif;font-size:0.85rem;font-weight:500;cursor:pointer;}
-.ts-box .close-ts:hover{background:var(--blue-light);color:var(--blue-dark);}
+.ts-box ol li{margin-bottom:0.5rem;}
+.ts-box .close-ts{margin-top:1.5rem;width:100%;padding:0.8rem;background:linear-gradient(135deg,var(--blue-light),var(--blue-mid));color:var(--white);border:none;border-radius:999px;font-family:'Inter',sans-serif;font-size:0.85rem;font-weight:500;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;}
+.ts-box .close-ts:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(107,140,174,0.35);}
 
 </style>
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode.js/1.5.3/qrcode.min.js"></script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer onload="window.__turnstileScriptLoaded=true" onerror="window.__turnstileScriptFailed=true"></script>
 <base target="_blank">
 </head>
 <body>
@@ -304,19 +305,18 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
     <button class="skip-captcha-btn" id="skip-captcha-btn" style="display:none;" onclick="skipCaptcha()">Skip verification for now</button>
     <button class="troubleshoot-link" onclick="document.getElementById('ts-modal').classList.add('active')">Troubleshoot</button>
     <div class="hint">Admin accounts are created in the Supabase dashboard — there is no default password.</div>
-
   </div>
 </div>
 
 <!-- Troubleshoot Modal -->
-<div class="ts-modal" id="ts-modal">
+<div class="ts-modal" id="ts-modal" onclick="if(event.target===this)document.getElementById('ts-modal').classList.remove('active')">
   <div class="ts-box">
-    <h3>Troubleshoot Sign-In</h3>
+    <h3>🔧 Troubleshoot Sign-In</h3>
     <ol>
-      <li><strong>CAPTCHA not showing?</strong> The verification widget loads from Cloudflare. If you're on a slow connection, wait a few seconds.</li>
-      <li><strong>Using an ad blocker?</strong> Some privacy extensions block Turnstile. Try disabling it for this site.</li>
-      <li><strong>Still stuck?</strong> Click "Skip verification for now" below the Sign In button to log in without CAPTCHA (less secure, but gets you unstuck).</li>
-      <li><strong>Wrong password?</strong> Admin accounts are created in the Supabase dashboard — there is no default password.</li>
+      <li><strong>CAPTCHA not showing?</strong> The verification widget loads from Cloudflare. On slow connections it may take a few seconds.</li>
+      <li><strong>Using an ad blocker or VPN?</strong> Some privacy tools block Turnstile. Try disabling them for this site.</li>
+      <li><strong>Still stuck?</strong> Click "Skip verification for now" below the Sign In button — you'll be able to log in without CAPTCHA.</li>
+      <li><strong>Forgot password?</strong> Admin accounts are created in the Supabase dashboard — there is no default password.</li>
     </ol>
     <button class="close-ts" onclick="document.getElementById('ts-modal').classList.remove('active')">Got it</button>
   </div>
@@ -1058,56 +1058,87 @@ if(supabaseClient){
 let turnstileWidgetId = null;
 let turnstileToken = '';
 let turnstileRetries = 0;
-const MAX_TURNSTILE_RETRIES = 20; // 20 * 500ms = 10 seconds
+const MAX_TURNSTILE_RETRIES = 30; // 30 * 500ms = 15 seconds max wait
+let turnstileLoadFailed = false;
 
 function renderTurnstile(){
   const el = document.getElementById('turnstile-container');
   const status = document.getElementById('captcha-status');
   const skipBtn = document.getElementById('skip-captcha-btn');
+
   if(!el || !TURNSTILE_SITE_KEY){
     if(status) status.textContent = '';
     return;
   }
+
+  // Detect if the Turnstile script itself failed to load (ad blocker, network)
+  if(window.__turnstileScriptFailed){
+    turnstileLoadFailed = true;
+    if(status){ status.textContent = '⚠️ Verification blocked. Click Troubleshoot.'; status.classList.add('error'); }
+    if(skipBtn) skipBtn.style.display = 'block';
+    return;
+  }
+
+  // Check if turnstile script is still loading
   if(typeof turnstile === 'undefined'){
     if(turnstileRetries < MAX_TURNSTILE_RETRIES){
       turnstileRetries++;
-      if(status) status.textContent = 'Loading verification… ('+turnstileRetries+')';
+      const remaining = Math.ceil((MAX_TURNSTILE_RETRIES - turnstileRetries) * 0.5);
+      if(status){ status.textContent = 'Loading verification… ' + remaining + 's'; status.classList.remove('error','ok','warn'); }
       setTimeout(renderTurnstile, 500);
     }else{
-      if(status){ status.textContent = 'Could not load verification widget.'; status.classList.add('error'); }
-      if(skipBtn) skipBtn.style.display = 'inline-block';
-      console.warn('Turnstile failed to load after retries. Offer skip option.');
+      // Exhausted retries — widget failed to load
+      turnstileLoadFailed = true;
+      if(status){ status.textContent = '⚠️ Verification widget failed to load.'; status.classList.add('error'); }
+      if(skipBtn) skipBtn.style.display = 'block';
+      console.warn('[Turnstile] Failed to load after ' + MAX_TURNSTILE_RETRIES + ' retries. Possible causes: ad blocker, network issue, or invalid site key.');
     }
     return;
   }
-  // Turnstile is available
-  if(turnstileWidgetId !== null){ try{ turnstile.reset(turnstileWidgetId); }catch(e){} return; }
+
+  // Turnstile library is available — try to render
+  if(turnstileWidgetId !== null){ 
+    try{ turnstile.reset(turnstileWidgetId); }catch(e){ turnstileWidgetId = null; }
+    if(turnstileWidgetId !== null) return; 
+  }
+
   try{
     turnstileWidgetId = turnstile.render(el, {
       sitekey: TURNSTILE_SITE_KEY,
-      callback: (token)=>{ turnstileToken = token; if(status){ status.textContent = 'Verification complete.'; status.classList.add('ok'); } },
-      'expired-callback': ()=>{ turnstileToken = ''; if(status){ status.textContent = 'Verification expired. Refreshing…'; status.classList.remove('ok'); } renderTurnstile(); },
-      'error-callback': ()=>{ turnstileToken = ''; if(status){ status.textContent = 'Verification error. Click Troubleshoot.'; status.classList.add('error'); } if(skipBtn) skipBtn.style.display = 'inline-block'; }
+      callback: (token)=>{ 
+        turnstileToken = token; 
+        if(status){ status.textContent = '✓ Verification complete'; status.classList.add('ok'); status.classList.remove('error','warn'); }
+      },
+      'expired-callback': ()=>{ 
+        turnstileToken = ''; 
+        if(status){ status.textContent = 'Verification expired. Refreshing…'; status.classList.remove('ok'); }
+        renderTurnstile(); 
+      },
+      'error-callback': (err)=>{ 
+        turnstileToken = ''; 
+        console.error('[Turnstile] Widget error:', err);
+        if(status){ status.textContent = '⚠️ Verification error. Click Troubleshoot.'; status.classList.add('error'); }
+        if(skipBtn) skipBtn.style.display = 'block';
+      }
     });
-    if(status){ status.textContent = 'Complete the check above.'; status.classList.remove('error'); }
+    if(status){ status.textContent = 'Complete the check above ↑'; status.classList.remove('error','warn'); }
   }catch(e){
-    console.error('Turnstile render error', e);
-    if(status){ status.textContent = 'Verification failed to start.'; status.classList.add('error'); }
-    if(skipBtn) skipBtn.style.display = 'inline-block';
+    console.error('[Turnstile] Render exception:', e);
+    if(status){ status.textContent = '⚠️ Could not start verification.'; status.classList.add('error'); }
+    if(skipBtn) skipBtn.style.display = 'block';
   }
 }
 
 function skipCaptcha(){
-  TURNSTILE_SITE_KEY = '';
   turnstileToken = 'skipped';
+  turnstileLoadFailed = false;
   const status = document.getElementById('captcha-status');
   const skipBtn = document.getElementById('skip-captcha-btn');
-  if(status){ status.textContent = 'Verification skipped for this session.'; status.classList.remove('error'); status.style.color = 'var(--gold-dark)'; }
-  if(skipBtn) skipBtn.style.display = 'none';
-  // Clear the container so it doesn't show a broken widget
   const el = document.getElementById('turnstile-container');
-  if(el) el.innerHTML = '';
-  showToast('CAPTCHA skipped — login will proceed without it');
+  if(status){ status.textContent = 'Verification skipped for this session.'; status.classList.remove('error'); status.classList.add('warn'); }
+  if(skipBtn) skipBtn.style.display = 'none';
+  if(el) el.innerHTML = '<div style="padding:0.5rem;font-size:0.75rem;color:var(--ink-light);text-align:center;border:1px dashed var(--blue-light);border-radius:8px;">CAPTCHA skipped</div>';
+  showToast('Verification skipped — you may now sign in');
 }
 
 /* ---------- Failed-login lockout (client-side deterrent) ----------
@@ -1207,8 +1238,13 @@ function isAdmin(){
 function showLogin(){
   document.getElementById('login-screen').classList.remove('hidden');
   turnstileRetries = 0;
-  // Small delay to let DOM settle before rendering Turnstile
-  setTimeout(renderTurnstile, 100);
+  turnstileLoadFailed = false;
+  const status = document.getElementById('captcha-status');
+  const skipBtn = document.getElementById('skip-captcha-btn');
+  if(status){ status.textContent = ''; status.classList.remove('error','ok','warn'); }
+  if(skipBtn) skipBtn.style.display = 'none';
+  // Delay slightly to ensure container is visible and measured
+  setTimeout(renderTurnstile, 150);
   checkLockoutUI();
 }
 function hideLogin(){document.getElementById('login-screen').classList.add('hidden');}
@@ -1231,20 +1267,36 @@ async function doLogin(){
   if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
   if(checkLockoutUI())return;
   if(!email||!pass){err.textContent='Enter your email and password';return;}
-  if(TURNSTILE_SITE_KEY && !turnstileToken){err.textContent='Please complete the verification check.';return;}
-  // If user explicitly skipped (token === 'skipped'), allow through even if key was originally set
-  if(!turnstileToken && TURNSTILE_SITE_KEY){err.textContent='Please complete the verification check.';return;}
+
+  // CAPTCHA check: must have token OR have explicitly skipped
+  if(TURNSTILE_SITE_KEY && !turnstileToken){
+    err.textContent='Please complete the verification check.';
+    // If widget failed to load, prompt user to skip
+    if(turnstileLoadFailed){
+      const skipBtn = document.getElementById('skip-captcha-btn');
+      if(skipBtn) skipBtn.style.display = 'block';
+    }
+    return;
+  }
+
   loginInFlight=true;
   if(btn){btn.disabled=true;btn.textContent='Signing in…';}
   try{
     const signInOpts={email,password:pass};
-    if(TURNSTILE_SITE_KEY && turnstileToken){signInOpts.options={captchaToken:turnstileToken};}
+    // Only send captcha token if it's a real one (not 'skipped')
+    if(TURNSTILE_SITE_KEY && turnstileToken && turnstileToken !== 'skipped'){
+      signInOpts.options={captchaToken:turnstileToken};
+    }
     const {data,error}=await supabaseClient.auth.signInWithPassword(signInOpts);
     if(error){
       // Generic message on purpose - don't reveal whether the email exists
       recordFailedLogin();
-      renderTurnstile(); // force a fresh captcha solve on each failed attempt
+      // Reset captcha for next attempt
       turnstileToken='';
+      turnstileRetries=0;
+      if(turnstileWidgetId !== null && typeof turnstile !== 'undefined'){
+        try{ turnstile.reset(turnstileWidgetId); }catch(e){}
+      }
       const locked=checkLockoutUI();
       if(!locked)err.textContent='Incorrect email or password.';
       passInput.value='';
@@ -1436,6 +1488,20 @@ async function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
+  // Safety net: if user is stuck on login screen with no CAPTCHA after 8s, show skip
+  setTimeout(()=>{
+    const loginScreen = document.getElementById('login-screen');
+    const skipBtn = document.getElementById('skip-captcha-btn');
+    if(loginScreen && !loginScreen.classList.contains('hidden') && !turnstileToken && skipBtn){
+      skipBtn.style.display = 'block';
+      const status = document.getElementById('captcha-status');
+      if(status && !status.textContent.includes('Skipped')){
+        status.textContent = 'Still loading? You can skip below.';
+        status.classList.add('warn');
+      }
+    }
+  }, 8000);
+
   // Resolve the real Supabase session first, so we know for certain
   // whether there's a valid admin JWT before deciding what to show.
   if(supabaseClient){
