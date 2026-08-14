@@ -87,10 +87,11 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--ink);ove
 .envelope-screen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
 .envelope-screen.card-only-mode{position:fixed;inset:0;z-index:9999;}
 body.card-only-mode #admin-bar,
+body.card-only-mode .viewer-bar,
 body.card-only-mode #editor-view,
 body.card-only-mode #login-screen,
+body.card-only-mode .top-nav,
 body.card-only-mode #admin-dashboard{display:none !important;}
-body.card-only-mode .viewer-bar{display:flex !important;}
 body.card-only-mode{background:var(--cream);}
 body.card-only-mode #viewer-view{display:flex !important;background:var(--cream);}
 body.card-only-mode .floral-bg{opacity:1;z-index:-1;}
@@ -676,13 +677,7 @@ function isAdminForCurrentLink(){
 function applyAdminVisibility(){
   const bar = document.querySelector('.viewer-bar');
   if(!bar) return;
-  // Show viewer bar for admin creators, hide for guests
-  // But always show it in card-only mode since it has the copy link button
-  if(document.body.classList.contains('card-only-mode')){
-    bar.style.display = 'flex';
-  }else{
-    bar.style.display = isAdminForCurrentLink() ? 'flex' : 'none';
-  }
+  bar.style.display = isAdminForCurrentLink() ? 'flex' : 'none';
 }
 
 /* ---------- Unicode-safe Base64 helpers ---------- */
@@ -997,8 +992,10 @@ function showToast(msg){
    same trust model as before, just backed by real Postgres now. */
 const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
-/* Auth: no CAPTCHA. Simple email + password via Supabase Auth. */
-const TURNSTILE_SITE_KEY = ''; // disabled — no CAPTCHA needed
+/* Auth: Supabase + local fallback. No CAPTCHA. */
+const TURNSTILE_SITE_KEY = ''; // disabled
+const LOCAL_ADMIN_PASSWORD = 'Grad2026!'; // Change this to your own password
+const LOCAL_ADMIN_EMAIL = 'admin'; // Can be anything — only password matters
 let supabaseClient = null;
 try{
   if(window.supabase && typeof window.supabase.createClient === 'function'){
@@ -1147,23 +1144,36 @@ async function doLogin(){
   const btn=document.getElementById('login-btn');
   const email=emailInput.value.trim();
   const pass=passInput.value;
-  if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
   if(checkLockoutUI())return;
   if(!email||!pass){err.textContent='Enter your email and password';return;}
+
   loginInFlight=true;
   if(btn){btn.disabled=true;btn.textContent='Signing in…';}
-  try{
-    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
-    if(error){
-      recordFailedLogin();
-      const locked=checkLockoutUI();
-      if(!locked) err.textContent = error.message || 'Login failed.';
-      passInput.value='';
-      passInput.focus();
-      return;
-    }
+
+  // METHOD 1: Try Supabase auth first (if configured)
+  let supabaseOk = false;
+  if(supabaseClient){
+    try{
+      const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
+      if(!error && data && data.session){
+        clearLoginAttempts();
+        currentSession=data.session;
+        supabaseOk = true;
+      }
+    }catch(e){ console.log('Supabase login failed:', e); }
+  }
+
+  // METHOD 2: Local password fallback (works without Supabase)
+  if(!supabaseOk && pass === LOCAL_ADMIN_PASSWORD){
     clearLoginAttempts();
-    currentSession=data.session;
+    currentSession = { user: { email: email || LOCAL_ADMIN_EMAIL }, local: true };
+    supabaseOk = true;
+  }
+
+  loginInFlight=false;
+  if(btn){btn.disabled=false;btn.textContent='Sign In';}
+
+  if(supabaseOk){
     err.textContent='';
     emailInput.value='';
     passInput.value='';
@@ -1171,17 +1181,17 @@ async function doLogin(){
     showAdminBar();
     resetIdleTimer();
     showToast('Welcome back, Admin');
-  }catch(e){
-    console.error(e);
-    err.textContent='Something went wrong. Try again.';
-  }finally{
-    loginInFlight=false;
-    if(btn){btn.disabled=false;btn.textContent='Sign In';}
+  }else{
+    recordFailedLogin();
+    const locked=checkLockoutUI();
+    if(!locked) err.textContent = 'Incorrect email or password.';
+    passInput.value='';
+    passInput.focus();
   }
 }
 
 async function doLogout(){
-  try{ if(supabaseClient) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
+  try{ if(supabaseClient && currentSession && !currentSession.local) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
   currentSession=null;
   clearTimeout(idleTimer);
   hideAdminBar();
@@ -1347,8 +1357,7 @@ async function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
-  // Resolve the real Supabase session first, so we know for certain
-  // whether there's a valid admin JWT before deciding what to show.
+  // Try Supabase session first
   if(supabaseClient){
     try{
       const {data}=await supabaseClient.auth.getSession();
