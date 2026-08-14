@@ -258,11 +258,28 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 }
 
 
-/* === Simple auth === */
-.password-wrap{position:relative;}
-.password-wrap .login-input{padding-right:2.5rem;}
-.toggle-pass{position:absolute;right:0.8rem;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--ink-light);font-size:0.75rem;cursor:pointer;padding:0.2rem;}
-.toggle-pass:hover{color:var(--ink);}
+/* === TOTP & Secret URL Auth === */
+.totp-inputs{display:flex;gap:0.6rem;justify-content:center;margin:1.2rem 0;}
+.totp-inputs input{width:48px;height:56px;text-align:center;font-size:1.6rem;font-weight:600;border:2px solid rgba(143,168,200,0.35);border-radius:12px;background:var(--white);color:var(--ink);outline:none;transition:border-color 0.2s,box-shadow 0.2s;}
+.totp-inputs input:focus{border-color:var(--blue-mid);box-shadow:0 0 0 4px rgba(143,168,200,0.15);}
+.totp-inputs input::-webkit-outer-spin-button,.totp-inputs input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.qr-wrap{display:flex;flex-direction:column;align-items:center;gap:1rem;margin:1.5rem 0;padding:1.5rem;background:var(--white);border-radius:12px;border:1.5px dashed var(--blue-light);}
+.qr-wrap #qrcode-admin{display:inline-block;padding:0.8rem;background:var(--white);border-radius:8px;}
+.secret-text{font-family:monospace;font-size:0.85rem;background:var(--cream);padding:0.6rem 1rem;border-radius:8px;color:var(--ink);word-break:break-all;text-align:center;}
+.manual-instructions{font-size:0.8rem;color:var(--ink-muted);line-height:1.6;text-align:left;margin-top:0.5rem;}
+.manual-instructions code{background:var(--cream);padding:0.15rem 0.4rem;border-radius:4px;font-size:0.75rem;}
+.copy-secret-btn{margin-top:0.5rem;font-size:0.75rem;color:var(--blue-dark);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;}
+.verify-btn{width:100%;padding:0.9rem;background:linear-gradient(135deg,var(--blue-mid),var(--blue-dark));color:var(--white);border:none;border-radius:999px;font-family:'Inter',sans-serif;font-size:0.95rem;font-weight:500;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 16px rgba(107,140,174,0.35);letter-spacing:0.02em;margin-top:0.5rem;}
+.verify-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(107,140,174,0.45);}
+.verify-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
+.totp-error{color:var(--danger);font-size:0.8rem;margin-top:0.6rem;min-height:1.2rem;text-align:center;}
+.totp-success{color:var(--success);font-size:0.85rem;margin-top:0.6rem;text-align:center;font-weight:500;}
+.setup-panel,.login-panel{display:none;}
+.setup-panel.active,.login-panel.active{display:block;animation:fadeIn 0.4s ease;}
+.secret-url-hint{font-size:0.72rem;color:var(--ink-light);margin-top:1rem;text-align:center;line-height:1.5;}
+.secret-url-hint code{background:var(--cream);padding:0.2rem 0.5rem;border-radius:4px;font-family:monospace;font-size:0.7rem;}
+.reset-totp-btn{display:block;margin:0.8rem auto 0;font-size:0.75rem;color:var(--ink-light);background:none;border:none;text-decoration:underline;cursor:pointer;font-family:inherit;}
+.reset-totp-btn:hover{color:var(--danger);}
 
 </style>
 <base target="_blank">
@@ -279,16 +296,58 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
     <div class="lock-icon">
       <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     </div>
-    <h2>Admin Login</h2>
-    <p>Sign in with your admin account to create and manage graduation invitations.</p>
-    <input type="email" class="login-input" id="login-email" placeholder="Email" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <div class="password-wrap">
-      <input type="password" class="login-input" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-      <button type="button" class="toggle-pass" onclick="togglePassword()" title="Show/hide password">👁</button>
+    <h2>Admin Access</h2>
+
+    <!-- SETUP: First time — show QR code -->
+    <div class="setup-panel" id="setup-panel">
+      <p style="font-size:0.85rem;color:var(--ink-muted);line-height:1.5;margin-bottom:1rem;">
+        Scan this QR code with <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app.
+      </p>
+      <div class="qr-wrap">
+        <div id="qrcode-admin"></div>
+        <div class="secret-text" id="setup-secret"></div>
+        <button class="copy-secret-btn" onclick="copyTOTPSecret()">Copy secret key</button>
+        <div class="manual-instructions">
+          <strong>Manual entry:</strong><br>
+          Account: <code>Graduation Invite</code><br>
+          Key: <code id="manual-secret"></code><br>
+          Type: <code>Time-based (TOTP)</code>
+        </div>
+      </div>
+      <div class="totp-inputs" id="setup-verify-inputs">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,0)" onkeydown="onTOTPKey(this,event,0)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,1)" onkeydown="onTOTPKey(this,event,1)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,2)" onkeydown="onTOTPKey(this,event,2)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,3)" onkeydown="onTOTPKey(this,event,3)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,4)" onkeydown="onTOTPKey(this,event,4)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,5)" onkeydown="onTOTPKey(this,event,5)">
+      </div>
+      <div class="totp-error" id="setup-error"></div>
+      <button class="verify-btn" id="setup-verify-btn" onclick="verifySetupCode()">Verify & Continue</button>
     </div>
-    <div class="login-error" id="login-error"></div>
-    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
-    <div class="hint">Admin accounts are created in the Supabase dashboard — there is no default password.</div>
+
+    <!-- LOGIN: Returning user — enter 6-digit code -->
+    <div class="login-panel" id="login-panel">
+      <p style="font-size:0.85rem;color:var(--ink-muted);line-height:1.5;margin-bottom:0.5rem;">
+        Enter the 6-digit code from your authenticator app.
+      </p>
+      <div class="totp-inputs">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,0)" onkeydown="onTOTPKey(this,event,0)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,1)" onkeydown="onTOTPKey(this,event,1)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,2)" onkeydown="onTOTPKey(this,event,2)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,3)" onkeydown="onTOTPKey(this,event,3)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,4)" onkeydown="onTOTPKey(this,event,4)">
+        <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" oninput="onTOTPInput(this,5)" onkeydown="onTOTPKey(this,event,5)">
+      </div>
+      <div class="totp-error" id="login-error"></div>
+      <button class="verify-btn" id="login-btn" onclick="doTOTPLogin()">Verify Code</button>
+      <button class="reset-totp-btn" onclick="resetTOTP()">Lost your authenticator? Reset setup →</button>
+    </div>
+
+    <div class="secret-url-hint">
+      🔑 Secret URL bypass:<br>
+      <code id="secret-url-display">?admin=...</code>
+    </div>
   </div>
 </div>
 
@@ -991,8 +1050,8 @@ function showToast(msg){
    same trust model as before, just backed by real Postgres now. */
 const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
-/* Auth: no CAPTCHA. Simple email + password via Supabase Auth. */
-const TURNSTILE_SITE_KEY = ''; // disabled — no CAPTCHA needed
+/* Security: TOTP (Authenticator app) + Secret URL bypass. No CAPTCHA. */
+const TURNSTILE_SITE_KEY = ''; // disabled — using TOTP instead
 let supabaseClient = null;
 try{
   if(window.supabase && typeof window.supabase.createClient === 'function'){
@@ -1014,16 +1073,223 @@ try{
    console — every write is checked server-side against a real JWT. */
 let currentSession = null;
 
+/* Supabase auth no longer used for admin login — TOTP + Secret URL instead. */
 if(supabaseClient){
-  supabaseClient.auth.onAuthStateChange((_event, session)=>{
-    currentSession = session;
-  });
+  // Keep supabase client for data storage only
 }
 
-/* ---------- Simple auth helpers ---------- */
-function togglePassword(){
-  const input = document.getElementById('login-password');
-  input.type = input.type === 'password' ? 'text' : 'password';
+/* ---------- TOTP + Secret URL Auth ---------- */
+const SECRET_URL_TOKEN = 'sk-7xK9mP2vLqR4wZ8t';
+const ADMIN_TOTP_KEY   = 'gradAdminTOTPSecret';
+const ADMIN_SESSION_KEY= 'gradAdminSession';
+const ADMIN_SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+let adminTOTPSecret = null;
+
+/* --- Secret URL bypass --- */
+function checkSecretURL(){
+  const params = new URLSearchParams(location.search);
+  if(params.get('admin') === SECRET_URL_TOKEN){
+    createAdminSession();
+    const cleanUrl = location.pathname + location.hash;
+    history.replaceState(null, '', cleanUrl);
+    return true;
+  }
+  return false;
+}
+
+function createAdminSession(){
+  try{
+    const session = { createdAt: Date.now(), expiresAt: Date.now() + ADMIN_SESSION_DURATION };
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+  }catch(e){}
+}
+
+function hasAdminSession(){
+  try{
+    const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+    if(!raw) return false;
+    const session = JSON.parse(raw);
+    return Date.now() < session.expiresAt;
+  }catch(e){ return false; }
+}
+
+function clearAdminSession(){
+  try{ localStorage.removeItem(ADMIN_SESSION_KEY); }catch(e){}
+}
+
+/* --- TOTP crypto (Web Crypto API) --- */
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32Encode(buf){
+  let bits = 0, value = 0, str = '';
+  for(let i = 0; i < buf.length; i++){
+    value = (value << 8) | buf[i];
+    bits += 8;
+    while(bits >= 5){
+      str += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if(bits > 0) str += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  return str;
+}
+
+function base32Decode(str){
+  str = str.toUpperCase().replace(/=+$/g, '');
+  let bits = 0, value = 0, idx = 0;
+  const out = new Uint8Array(Math.floor(str.length * 5 / 8));
+  for(let i = 0; i < str.length; i++){
+    const val = BASE32_ALPHABET.indexOf(str[i]);
+    if(val === -1) continue;
+    value = (value << 5) | val;
+    bits += 5;
+    if(bits >= 8){
+      out[idx++] = (value >>> (bits - 8)) & 255;
+      bits -= 8;
+    }
+  }
+  return out.slice(0, idx);
+}
+
+async function hmacSHA1(key, msg){
+  const cryptoKey = await crypto.subtle.importKey('raw', key, {name: 'HMAC', hash: 'SHA-1'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msg);
+  return new Uint8Array(sig);
+}
+
+async function generateTOTP(secret, windowOffset){
+  windowOffset = windowOffset || 0;
+  const key = base32Decode(secret);
+  const epoch = Math.floor(Date.now() / 1000);
+  const time = Math.floor(epoch / 30) + windowOffset;
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setUint32(0, 0);
+  view.setUint32(4, time);
+  const hash = await hmacSHA1(key, new Uint8Array(buf));
+  const offset = hash[hash.length - 1] & 0x0f;
+  const code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff)) % 1000000;
+  return String(code).padStart(6, '0');
+}
+
+async function verifyTOTP(secret, code){
+  for(let i = -1; i <= 1; i++){
+    if(await generateTOTP(secret, i) === code) return true;
+  }
+  return false;
+}
+
+function generateRandomSecret(){
+  const buf = new Uint8Array(20);
+  crypto.getRandomValues(buf);
+  return base32Encode(buf);
+}
+
+/* --- UI helpers --- */
+function getTOTPInputs(panelId){
+  const panel = document.getElementById(panelId);
+  return Array.from(panel.querySelectorAll('.totp-inputs input')).map(function(i){ return i.value; }).join('');
+}
+
+function clearTOTPInputs(panelId){
+  const panel = document.getElementById(panelId);
+  const inputs = panel.querySelectorAll('.totp-inputs input');
+  inputs.forEach(function(i){ i.value = ''; });
+  if(inputs[0]) inputs[0].focus();
+}
+
+function onTOTPInput(el, idx){
+  el.value = el.value.replace(/[^0-9]/g, '').slice(0, 1);
+  if(el.value && idx < 5){
+    const next = el.parentElement.children[idx + 1];
+    if(next) next.focus();
+  }
+}
+
+function onTOTPKey(el, ev, idx){
+  if(ev.key === 'Backspace' && !el.value && idx > 0){
+    const prev = el.parentElement.children[idx - 1];
+    if(prev){ prev.value = ''; prev.focus(); }
+  }
+  if(ev.key === 'Enter'){
+    const panel = el.closest('.setup-panel, .login-panel');
+    if(panel.id === 'setup-panel') verifySetupCode();
+    else doTOTPLogin();
+  }
+}
+
+function copyTOTPSecret(){
+  if(!adminTOTPSecret) return;
+  copyToClipboard(adminTOTPSecret);
+  showToast('Secret key copied!');
+}
+
+function renderAdminQR(){
+  const el = document.getElementById('qrcode-admin');
+  if(!el || !adminTOTPSecret) return;
+  el.innerHTML = '';
+  const otpauth = 'otpauth://totp/Graduation%20Invite:admin?secret=' + adminTOTPSecret + '&issuer=Graduation%20Invite';
+  try{
+    new QRCode(el, { text: otpauth, width: 180, height: 180, colorDark: '#2C2C2C', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
+  }catch(e){ el.textContent = 'QR unavailable — use manual entry'; }
+}
+
+/* --- Setup flow --- */
+function initTOTPSetup(){
+  adminTOTPSecret = generateRandomSecret();
+  try{ localStorage.setItem(ADMIN_TOTP_KEY, adminTOTPSecret); }catch(e){}
+  document.getElementById('setup-secret').textContent = adminTOTPSecret;
+  document.getElementById('manual-secret').textContent = adminTOTPSecret;
+  document.getElementById('setup-panel').classList.add('active');
+  document.getElementById('login-panel').classList.remove('active');
+  renderAdminQR();
+  document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+}
+
+async function verifySetupCode(){
+  const code = getTOTPInputs('setup-panel');
+  const err = document.getElementById('setup-error');
+  const btn = document.getElementById('setup-verify-btn');
+  if(code.length !== 6){ err.textContent = 'Enter all 6 digits.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+  const ok = await verifyTOTP(adminTOTPSecret, code);
+  btn.disabled = false;
+  btn.textContent = 'Verify & Continue';
+  if(!ok){ err.textContent = 'Invalid code. Make sure your app clock is correct.'; clearTOTPInputs('setup-panel'); return; }
+  err.textContent = '';
+  createAdminSession();
+  hideLogin();
+  showAdminBar();
+  showToast('Admin access granted');
+}
+
+/* --- Login flow --- */
+async function doTOTPLogin(){
+  const code = getTOTPInputs('login-panel');
+  const err = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  if(code.length !== 6){ err.textContent = 'Enter all 6 digits.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+  const ok = await verifyTOTP(adminTOTPSecret, code);
+  btn.disabled = false;
+  btn.textContent = 'Verify Code';
+  if(!ok){ err.textContent = 'Invalid code. Try again.'; clearTOTPInputs('login-panel'); return; }
+  err.textContent = '';
+  createAdminSession();
+  hideLogin();
+  showAdminBar();
+  showToast('Welcome back, Admin');
+}
+
+function resetTOTP(){
+  if(!confirm('Reset authenticator setup? You will need to scan a new QR code.')) return;
+  try{ localStorage.removeItem(ADMIN_TOTP_KEY); }catch(e){}
+  adminTOTPSecret = null;
+  initTOTPSetup();
+  showToast('Authenticator reset — scan the new QR code');
 }
 
 /* ---------- Failed-login lockout (client-side deterrent) ----------
@@ -1117,98 +1383,34 @@ async function addInviteToStore(data,hash){
 }
 
 function isAdmin(){
-  return !!(currentSession && currentSession.user);
+  return hasAdminSession();
 }
 
 function showLogin(){
   document.getElementById('login-screen').classList.remove('hidden');
-  checkLockoutUI();
+  try{
+    adminTOTPSecret = localStorage.getItem(ADMIN_TOTP_KEY);
+  }catch(e){ adminTOTPSecret = null; }
+  if(adminTOTPSecret){
+    document.getElementById('setup-panel').classList.remove('active');
+    document.getElementById('login-panel').classList.add('active');
+    clearTOTPInputs('login-panel');
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+  }else{
+    initTOTPSetup();
+  }
 }
 function hideLogin(){document.getElementById('login-screen').classList.add('hidden');}
 function showAdminBar(){
   document.getElementById('admin-bar').classList.add('active');
   const label=document.getElementById('admin-email-label');
-  if(label)label.textContent='Logged in as '+(currentSession&&currentSession.user&&currentSession.user.email||'Administrator');
+  if(label)label.textContent='Logged in as Administrator';
 }
 function hideAdminBar(){document.getElementById('admin-bar').classList.remove('active');}
 
 let loginInFlight=false;
-async function doLogin(){
-  if(loginInFlight)return;
-  const emailInput=document.getElementById('login-email');
-  const passInput=document.getElementById('login-password');
-  const err=document.getElementById('login-error');
-  const btn=document.getElementById('login-btn');
-  const email=emailInput.value.trim();
-  const pass=passInput.value;
-  if(!supabaseClient){err.textContent='Cannot reach the login service right now.';return;}
-  if(checkLockoutUI())return;
-  if(!email||!pass){err.textContent='Enter your email and password';return;}
-  loginInFlight=true;
-  if(btn){btn.disabled=true;btn.textContent='Signing in…';}
-  try{
-    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password:pass});
-    if(error){
-      recordFailedLogin();
-      const locked=checkLockoutUI();
-      if(!locked) err.textContent = error.message || 'Login failed.';
-      passInput.value='';
-      passInput.focus();
-      return;
-    }
-    clearLoginAttempts();
-    currentSession=data.session;
-    err.textContent='';
-    emailInput.value='';
-    passInput.value='';
-    hideLogin();
-    showAdminBar();
-    resetIdleTimer();
-    showToast('Welcome back, Admin');
-  }catch(e){
-    console.error(e);
-    err.textContent='Something went wrong. Try again.';
-  }finally{
-    loginInFlight=false;
-    if(btn){btn.disabled=false;btn.textContent='Sign In';}
-  }
-}
-
-async function doLogout(){
-  try{ if(supabaseClient) await supabaseClient.auth.signOut(); }catch(e){console.error(e);}
-  currentSession=null;
-  clearTimeout(idleTimer);
-  hideAdminBar();
-  showLogin();
-  showToast('Logged out');
-}
-
-/* Gated generateLink - only admin can generate */
-async function generateLink(){
-  if(!isAdmin()){
-    showLogin();
-    showToast('Admin login required to generate invitations');
-    return;
-  }
-  try{
-    gatherFormData();
-    // Generate short hash
-    const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
-    const hashKey = '#'+shortId;
-    showToast('Saving invitation…');
-    // Store in shared backend storage so the link works on any device
-    await addInviteToStore(invitationData,hashKey);
-    const url=location.origin+location.pathname+hashKey;
-    history.replaceState(null,'',hashKey);
-    markAsAdmin(hashKey);
-    copyToClipboard(url);
-    showToast('Link copied! Share it with your friends');
-    setTimeout(()=>showViewer(),800);
-  }catch(err){
-    console.error(err);
-    showToast('Error: '+(err.message||'Could not create link'));
-  }
-}
+/* doLogin removed — using TOTP instead */}
 
 /* ========== ADMIN DASHBOARD ========== */
 async function openAdminDashboard(){
@@ -1341,13 +1543,16 @@ async function resetSystem(){
 
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded',async ()=>{
-  // Resolve the real Supabase session first, so we know for certain
-  // whether there's a valid admin JWT before deciding what to show.
-  if(supabaseClient){
-    try{
-      const {data}=await supabaseClient.auth.getSession();
-      currentSession=data.session;
-    }catch(e){console.error('Auth init error',e);}
+  // Auth: TOTP + Secret URL. Check bypass first, then session.
+  if(checkSecretURL()){
+    hideLogin();
+    showAdminBar();
+    showToast('Admin access via secret URL');
+  }else if(hasAdminSession()){
+    hideLogin();
+    showAdminBar();
+  }else{
+    showLogin();
   }
 
   const hash=location.hash.slice(1); // Remove the #
