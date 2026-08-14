@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --cream:#F5F1E8;--cream-dark:#E8E0D0;--blue-light:#C5D5E5;--blue-mid:#8FA8C8;
@@ -94,6 +95,16 @@ body.card-only-mode #admin-dashboard{display:none !important;}
 body.card-only-mode{background:var(--cream);}
 body.card-only-mode #viewer-view{display:flex !important;background:var(--cream);}
 body.card-only-mode .floral-bg{opacity:1;z-index:-1;}
+
+/* QR Code Modal */
+.qr-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;}
+.qr-modal.active{display:flex;}
+.qr-modal-content{background:var(--white);border-radius:16px;padding:2rem;text-align:center;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.qr-modal-content h2{font-family:'Playfair Display',serif;font-size:1.4rem;margin-bottom:1.5rem;color:var(--ink);}
+.qr-modal-content #qrcode{display:inline-block;margin:1rem 0;}
+.qr-modal-content .short-link{background:var(--cream);padding:1rem;border-radius:10px;margin:1.5rem 0;word-break:break-all;font-family:monospace;font-size:0.85rem;color:var(--ink);}
+.qr-modal-content .btn-row{margin-top:1.5rem;display:flex;gap:0.8rem;justify-content:center;flex-wrap:wrap;}
+.qr-modal-close{position:absolute;top:1.5rem;right:1.5rem;width:32px;height:32px;border:none;background:var(--cream);border-radius:50%;cursor:pointer;font-size:1.2rem;color:var(--ink);display:flex;align-items:center;justify-content:center;}
 body.card-only-mode .envelope-wrap{width:min(240px,60vw);height:150px;}
 body.card-only-mode .envelope-card{padding:1rem;}
 body.card-only-mode .invitation-content h1{font-size:clamp(1.2rem,3vw,1.6rem) !important;}
@@ -250,6 +261,7 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode.js/1.5.3/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -509,6 +521,20 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       Copy Link
     </button>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="qr-modal">
+    <button class="qr-modal-close" onclick="closeQRModal()">✕</button>
+    <div class="qr-modal-content">
+      <h2>Share Your Invitation</h2>
+      <div id="qrcode"></div>
+      <div class="short-link" id="short-link-display"></div>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="downloadQR()">Download QR Code</button>
+        <button class="btn-secondary" onclick="closeQRModal()">Close</button>
+      </div>
+    </div>
   </div>
 
   <nav class="top-nav">
@@ -946,9 +972,16 @@ function showToast(msg){
 }
 
 /* ==================== ADMIN AUTH & GENERATE LINK ==================== */
-const ADMIN_CFG_KEY = 'gradInviteAdminCfg';
+/* Backend note: invitations and admin config live in Supabase (Postgres),
+   so a link you generate on one device opens correctly on any other
+   device/browser. This data is shared with anyone who has access to
+   this app instance and its anon key (visible in page source) — the
+   same trust model as before, just backed by real Postgres now. */
+const SUPABASE_URL = 'https://hivvehvrxqlomtzttpps.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_WEaFC69tNySvqVWLsoFMzw_8tqdFAMr';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const ADMIN_SESS_KEY = 'gradInviteAdminSess';
-const ALL_INVITES_KEY = 'gradInviteAllInvites';
 const DEFAULT_PASS = 'admin123';
 
 async function sha256(str){
@@ -962,24 +995,43 @@ async function sha256(str){
   }
 }
 
-function getAdminCfg(){
-  try{const r=localStorage.getItem(ADMIN_CFG_KEY);if(r)return JSON.parse(r);}catch(e){}
+async function getAdminCfg(){
+  try{
+    const {data,error}=await supabase.from('admin_config').select('*').eq('id',1).maybeSingle();
+    if(error)throw error;
+    if(data)return {passwordHash:data.password_hash,createdAt:new Date(data.created_at).getTime()};
+  }catch(e){console.error('Storage error',e);}
   return {passwordHash:null,createdAt:Date.now()};
 }
-function saveAdminCfg(cfg){localStorage.setItem(ADMIN_CFG_KEY,JSON.stringify(cfg));}
+async function saveAdminCfg(cfg){
+  try{
+    const {error}=await supabase.from('admin_config').upsert({id:1,password_hash:cfg.passwordHash});
+    if(error)throw error;
+  }catch(e){console.error('Storage error',e);showToast('Could not save admin settings');}
+}
 
-function getAllInvites(){
-  try{const r=localStorage.getItem(ALL_INVITES_KEY);if(r)return JSON.parse(r);}catch(e){}
+async function getAllInvites(){
+  try{
+    const {data,error}=await supabase.from('invitations').select('*').order('created_at',{ascending:false});
+    if(error)throw error;
+    return (data||[]).map(r=>({hash:r.hash,data:r.data,createdAt:new Date(r.created_at).getTime(),updatedAt:new Date(r.updated_at).getTime()}));
+  }catch(e){console.error('Storage error',e);}
   return [];
 }
-function saveAllInvites(list){localStorage.setItem(ALL_INVITES_KEY,JSON.stringify(list));}
+async function saveAllInvites(list){
+  try{
+    if(!list.length)return;
+    const rows=list.map(i=>({hash:i.hash,data:i.data,created_at:new Date(i.createdAt||Date.now()).toISOString(),updated_at:new Date(i.updatedAt||Date.now()).toISOString()}));
+    const {error}=await supabase.from('invitations').upsert(rows);
+    if(error)throw error;
+  }catch(e){console.error('Storage error',e);showToast('Could not save invitations');}
+}
 
-function addInviteToStore(data,hash){
-  const list=getAllInvites();
-  const idx=list.findIndex(i=>i.hash===hash);
-  const entry={hash,data,createdAt:idx>=0?list[idx].createdAt:Date.now(),updatedAt:Date.now()};
-  if(idx>=0)list[idx]=entry;else list.push(entry);
-  saveAllInvites(list);
+async function addInviteToStore(data,hash){
+  try{
+    const {error}=await supabase.from('invitations').upsert({hash,data,updated_at:new Date().toISOString()});
+    if(error)throw error;
+  }catch(e){console.error('Storage error',e);showToast('Could not save invitation');}
 }
 
 function isAdmin(){
@@ -1006,11 +1058,11 @@ async function doLogin(){
   const err=document.getElementById('login-error');
   const pass=input.value.trim();
   if(!pass){err.textContent='Enter a password';return;}
-  const cfg=getAdminCfg();
+  const cfg=await getAdminCfg();
   const hash=await sha256(pass);
   if(!cfg.passwordHash){
     cfg.passwordHash=hash;
-    saveAdminCfg(cfg);
+    await saveAdminCfg(cfg);
     setAdminSession();
     err.textContent='';
     input.value='';
@@ -1039,7 +1091,7 @@ function doLogout(){
 }
 
 /* Gated generateLink - only admin can generate */
-function generateLink(){
+async function generateLink(){
   if(!isAdmin()){
     showLogin();
     showToast('Admin login required to generate invitations');
@@ -1049,12 +1101,13 @@ function generateLink(){
     gatherFormData();
     // Generate short hash
     const shortId = 'inv_' + Math.random().toString(36).substring(2, 8).toUpperCase();
-    // Store in localStorage
-    localStorage.setItem(shortId, JSON.stringify(invitationData));
-    const url=location.origin+location.pathname+'#'+shortId;
-    history.replaceState(null,'','#'+shortId);
-    markAsAdmin('#'+shortId);
-    addInviteToStore(invitationData,'#'+shortId);
+    const hashKey = '#'+shortId;
+    showToast('Saving invitation…');
+    // Store in shared backend storage so the link works on any device
+    await addInviteToStore(invitationData,hashKey);
+    const url=location.origin+location.pathname+hashKey;
+    history.replaceState(null,'',hashKey);
+    markAsAdmin(hashKey);
     copyToClipboard(url);
     showToast('Link copied! Share it with your friends');
     setTimeout(()=>showViewer(),800);
@@ -1065,36 +1118,35 @@ function generateLink(){
 }
 
 /* ========== ADMIN DASHBOARD ========== */
-function openAdminDashboard(){
+async function openAdminDashboard(){
   if(!isAdmin()){showLogin();return;}
   document.getElementById('admin-dashboard').classList.add('active');
-  renderDashboard();
+  const container=document.getElementById('invitations-table');
+  if(container)container.innerHTML='<div class="empty-state"><p>Loading invitations…</p></div>';
+  await renderDashboard();
 }
 function closeAdminDashboard(){document.getElementById('admin-dashboard').classList.remove('active');}
 
-function getStorageUsed(){
+function getStorageUsed(list){
   let total=0;
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith('gradInvite')){const v=localStorage.getItem(k);if(v)total+=v.length;}
-  }
+  list.forEach(i=>{try{total+=JSON.stringify(i.data).length;}catch(e){}});
   if(total<1024)return total+' B';
   if(total<1024*1024)return(total/1024).toFixed(1)+' KB';
   return(total/(1024*1024)).toFixed(1)+' MB';
 }
 
-function renderDashboard(){
-  const list=getAllInvites();
+async function renderDashboard(){
+  const list=await getAllInvites();
   document.getElementById('stat-total').textContent=list.length;
   const withPhotos=list.filter(i=>i.data.photos&&i.data.photos.some(p=>p&&(p.startsWith('data:')||p.startsWith('http')))).length;
   document.getElementById('stat-photos').textContent=withPhotos;
-  document.getElementById('stat-storage').textContent=getStorageUsed();
+  document.getElementById('stat-storage').textContent=getStorageUsed(list);
   const last=list.length>0?new Date(Math.max(...list.map(i=>i.createdAt))):null;
   document.getElementById('stat-last').textContent=last?last.toLocaleDateString(undefined,{month:'short',day:'numeric'}):'—';
 
   const container=document.getElementById('invitations-table');
   if(list.length===0){
-    container.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><p>No invitations found on this device.</p></div>';
+    container.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><p>No invitations yet.</p></div>';
     return;
   }
   let html='<table><thead><tr><th>Graduate</th><th>Date</th><th>School</th><th>Created</th><th style="text-align:right">Actions</th></tr></thead><tbody>';
@@ -1109,12 +1161,14 @@ function renderDashboard(){
   container.innerHTML=html;
 }
 
-function dashView(hash){
-  location.hash=hash;
+async function dashView(hash){
   closeAdminDashboard();
   try{
-    const json=base64ToUtf8(decodeURIComponent(hash.slice(5)));
-    invitationData=JSON.parse(json);
+    const list=await getAllInvites();
+    const entry=list.find(i=>i.hash===hash);
+    if(!entry){showToast('Invitation not found');return;}
+    location.hash=hash;
+    invitationData=entry.data;
     showViewer();
   }catch(e){showToast('Invalid invitation data');}
 }
@@ -1122,16 +1176,18 @@ function dashCopy(hash){
   copyToClipboard(location.origin+location.pathname+hash);
   showToast('Invitation link copied');
 }
-function dashDelete(hash){
+async function dashDelete(hash){
   if(!confirm('Delete this invitation permanently?'))return;
-  let list=getAllInvites().filter(i=>i.hash!==hash);
-  saveAllInvites(list);
-  renderDashboard();
+  try{
+    const {error}=await supabase.from('invitations').delete().eq('hash',hash);
+    if(error)throw error;
+  }catch(e){console.error('Storage error',e);showToast('Could not delete invitation');return;}
+  await renderDashboard();
   showToast('Invitation deleted');
 }
 
-function exportAllData(){
-  const data={exportedAt:new Date().toISOString(),version:'1.0',invitations:getAllInvites(),config:getAdminCfg()};
+async function exportAllData(){
+  const data={exportedAt:new Date().toISOString(),version:'1.0',invitations:await getAllInvites(),config:await getAdminCfg()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='grad-invitations-backup-'+new Date().toISOString().slice(0,10)+'.json';
@@ -1139,15 +1195,15 @@ function exportAllData(){
   showToast('Backup downloaded');
 }
 
-function importData(){
+async function importData(){
   const raw=document.getElementById('import-json').value.trim();
   if(!raw){showToast('Paste JSON backup first');return;}
   try{
     const data=JSON.parse(raw);
-    if(data.invitations&&Array.isArray(data.invitations))saveAllInvites(data.invitations);
-    if(data.config&&typeof data.config==='object')saveAdminCfg(data.config);
+    if(data.invitations&&Array.isArray(data.invitations))await saveAllInvites(data.invitations);
+    if(data.config&&typeof data.config==='object')await saveAdminCfg(data.config);
     document.getElementById('import-json').value='';
-    renderDashboard();
+    await renderDashboard();
     showToast('Backup imported successfully');
   }catch(e){showToast('Invalid JSON: '+e.message);}
 }
@@ -1157,36 +1213,36 @@ async function changeAdminPassword(){
   const p2=document.getElementById('confirm-admin-pass').value;
   if(!p1||p1.length<4){showToast('Password must be at least 4 characters');return;}
   if(p1!==p2){showToast('Passwords do not match');return;}
-  const cfg=getAdminCfg();
+  const cfg=await getAdminCfg();
   cfg.passwordHash=await sha256(p1);
-  saveAdminCfg(cfg);
+  await saveAdminCfg(cfg);
   document.getElementById('new-admin-pass').value='';
   document.getElementById('confirm-admin-pass').value='';
   showToast('Admin password updated');
 }
 
-function resetSystem(){
+async function resetSystem(){
   if(!confirm('WARNING: Delete ALL invitations and settings?'))return;
   if(!confirm('Are you absolutely sure? This is permanent.'))return;
-  const keys=[];
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('gradInvite'))keys.push(k);}
-  keys.forEach(k=>localStorage.removeItem(k));
+  try{await supabase.from('invitations').delete().not('hash','is',null);}catch(e){}
+  try{await supabase.from('admin_config').delete().eq('id',1);}catch(e){}
   clearAdminSession();
-  renderDashboard();
+  await renderDashboard();
   showToast('System reset complete');
   setTimeout(()=>{hideAdminBar();showLogin();},500);
 }
 
 /* ========== INIT ========== */
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded',async ()=>{
   const hash=location.hash.slice(1); // Remove the #
-  
-  // Check for short URL format (inv_XXXXXX)
+
+  // Check for short URL format (inv_XXXXXX) - resolved from shared backend storage
   if(hash.startsWith('inv_')){
     try{
-      const data = localStorage.getItem(hash);
-      if(data){
-        invitationData=JSON.parse(data);
+      const list = await getAllInvites();
+      const entry = list.find(i=>i.hash==='#'+hash);
+      if(entry){
+        invitationData=entry.data;
         showViewer(true, true);
       }else{
         showToast('Invitation not found');
@@ -1194,7 +1250,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       }
     }catch(e){console.error('Invalid invitation link',e); showLogin();}
   }
-  // Check for old long URL format (inv=...)
+  // Check for old long URL format (inv=...) - self-contained, no backend needed
   else if(hash.startsWith('inv=')){
     try{
       const json=base64ToUtf8(decodeURIComponent(hash.slice(4)));
