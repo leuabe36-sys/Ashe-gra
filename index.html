@@ -1050,7 +1050,7 @@ function generateLink(){
     addInviteToStore(invitationData,'#inv='+encoded);
     copyToClipboard(url);
     showToast('Link copied! Share it with your friends');
-    setTimeout(()=>showViewer(false, true),800);
+    setTimeout(()=>showViewer(),800);
   }catch(err){
     console.error(err);
     showToast('Error: '+(err.message||'Could not create link'));
@@ -1177,7 +1177,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     try{
       const json=base64ToUtf8(decodeURIComponent(hash.slice(5)));
       invitationData=JSON.parse(json);
-      showViewer(true);
+      showViewer(true, true);
     }catch(e){console.error('Invalid invitation link',e);}
   }else{
     if(isAdmin()){
