@@ -274,8 +274,9 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
 .verify-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
 .totp-error{color:var(--danger);font-size:0.8rem;margin-top:0.6rem;min-height:1.2rem;text-align:center;}
 .totp-success{color:var(--success);font-size:0.85rem;margin-top:0.6rem;text-align:center;font-weight:500;}
-.setup-panel,.login-panel{display:block;}
-.setup-panel.hidden,.login-panel.hidden{display:none !important;}
+.setup-panel{display:block;}
+.login-panel{display:none;}
+.login-panel.visible{display:block;animation:fadeIn 0.4s ease;}
 .secret-url-hint{font-size:0.72rem;color:var(--ink-light);margin-top:1rem;text-align:center;line-height:1.5;}
 .secret-url-hint code{background:var(--cream);padding:0.2rem 0.5rem;border-radius:4px;font-family:monospace;font-size:0.7rem;}
 .reset-totp-btn{display:block;margin:0.8rem auto 0;font-size:0.75rem;color:var(--ink-light);background:none;border:none;text-decoration:underline;cursor:pointer;font-family:inherit;}
@@ -327,7 +328,7 @@ body.card-only-mode .invitation-content p{font-size:clamp(0.75rem,2vw,0.9rem) !i
     </div>
 
     <!-- LOGIN: Returning user — enter 6-digit code -->
-    <div class="login-panel" id="login-panel" class="hidden">
+    <div class="login-panel" id="login-panel" style="display:none !important;" class="hidden">
       <p style="font-size:0.85rem;color:var(--ink-muted);line-height:1.5;margin-bottom:0.5rem;">
         Enter the 6-digit code from your authenticator app.
       </p>
@@ -1226,13 +1227,12 @@ function copyTOTPSecret(){
 }
 
 function renderAdminQR(){
-  const el = document.getElementById('qrcode-admin');
+  var el = document.getElementById('qrcode-admin');
   if(!el || !adminTOTPSecret) return;
-  el.innerHTML = '';
-  const otpauth = 'otpauth://totp/Graduation%20Invite:admin?secret=' + adminTOTPSecret + '&issuer=Graduation%20Invite';
-  try{
-    new QRCode(el, { text: otpauth, width: 180, height: 180, colorDark: '#2C2C2C', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
-  }catch(e){ el.textContent = 'QR unavailable — use manual entry'; }
+  var otpauth = 'otpauth://totp/Graduation%20Invite:admin?secret=' + adminTOTPSecret + '&issuer=Graduation%20Invite';
+  // Use Google Chart API for reliable QR generation (no external lib needed)
+  var qrUrl = 'https://chart.googleapis.com/chart?cht=qr&chs=200x200&chld=M|0&chl=' + encodeURIComponent(otpauth);
+  el.innerHTML = '<img src="' + qrUrl + '" width="180" height="180" style="display:block;margin:0 auto;border-radius:8px;" alt="Scan with authenticator app" onerror="this.parentElement.innerHTML='<div style=padding:1rem;text-align:center;color:var(--ink-light);font-size:0.8rem;>QR unavailable<br>Use manual entry below</div>'">';
 }
 
 /* --- Setup flow --- */
@@ -1240,15 +1240,21 @@ function initTOTPSetup(){
   try{
     adminTOTPSecret = generateRandomSecret();
     try{ localStorage.setItem(ADMIN_TOTP_KEY, adminTOTPSecret); }catch(e){}
-    document.getElementById('setup-secret').textContent = adminTOTPSecret;
-    document.getElementById('manual-secret').textContent = adminTOTPSecret;
-    document.getElementById('setup-panel').classList.remove('hidden');
-    document.getElementById('login-panel').classList.add('hidden');
+    var setupSecret = document.getElementById('setup-secret');
+    var manualSecret = document.getElementById('manual-secret');
+    if(setupSecret) setupSecret.textContent = adminTOTPSecret;
+    if(manualSecret) manualSecret.textContent = adminTOTPSecret;
+    var setupPanel = document.getElementById('setup-panel');
+    var loginPanel = document.getElementById('login-panel');
+    if(setupPanel) setupPanel.style.display = 'block';
+    if(loginPanel) loginPanel.style.display = 'none';
     renderAdminQR();
-    document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+    var secretUrl = document.getElementById('secret-url-display');
+    if(secretUrl) secretUrl.textContent = '?admin=' + SECRET_URL_TOKEN;
   }catch(err){
     console.error('TOTP setup error:', err);
-    document.getElementById('setup-error').textContent = 'Setup error: ' + err.message;
+    var setupErr = document.getElementById('setup-error');
+    if(setupErr) setupErr.textContent = 'Setup error: ' + err.message;
   }
 }
 
@@ -1406,17 +1412,24 @@ function isAdmin(){
 }
 
 function showLogin(){
-  document.getElementById('login-screen').classList.remove('hidden');
+  var screen = document.getElementById('login-screen');
+  if(screen) screen.classList.remove('hidden');
   try{
     adminTOTPSecret = localStorage.getItem(ADMIN_TOTP_KEY);
   }catch(e){ adminTOTPSecret = null; }
+  var setupPanel = document.getElementById('setup-panel');
+  var loginPanel = document.getElementById('login-panel');
   if(adminTOTPSecret){
-    document.getElementById('setup-panel').classList.add('hidden');
-    document.getElementById('login-panel').classList.remove('hidden');
+    if(setupPanel) setupPanel.style.display = 'none';
+    if(loginPanel) loginPanel.style.display = 'block';
     clearTOTPInputs('login-panel');
-    document.getElementById('login-error').textContent = '';
-    document.getElementById('secret-url-display').textContent = '?admin=' + SECRET_URL_TOKEN;
+    var loginErr = document.getElementById('login-error');
+    if(loginErr) loginErr.textContent = '';
+    var secretUrl = document.getElementById('secret-url-display');
+    if(secretUrl) secretUrl.textContent = '?admin=' + SECRET_URL_TOKEN;
   }else{
+    if(setupPanel) setupPanel.style.display = 'block';
+    if(loginPanel) loginPanel.style.display = 'none';
     initTOTPSetup();
   }
 }
